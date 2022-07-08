@@ -61,7 +61,6 @@ async def get_stat(message: Message):
 
     text = ''
     count_messages = 0
-    # cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} ORDER BY characters DESC')
     cursor.execute(f'SELECT *, CASE '
                    f'WHEN {days_without_activity_is_bad} > ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) '
                    'THEN 0 '
