@@ -39,6 +39,91 @@ async def on_startup(_):
     connect.commit()
 
 
+async def get_stat(message: Message):
+    id_chat = message.chat.id
+
+    include_admins_in_statistics = False
+    chat_admins = await bot.get_chat_administrators(id_chat)
+    days_without_activity_is_bad = 0
+    sort_by_messages = False
+    do_not_output_the_number_of_messages = False
+    do_not_output_the_number_of_characters = False
+
+    cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
+    meaning = cursor.fetchone()
+    if meaning is not None:
+        if meaning[2]:
+            include_admins_in_statistics = True
+        days_without_activity_is_bad = meaning[6]
+        sort_by_messages = meaning[3]
+        do_not_output_the_number_of_messages = meaning[4]
+        do_not_output_the_number_of_characters = meaning[5]
+
+    text = ''
+    count_messages = 0
+    # cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} ORDER BY characters DESC')
+    cursor.execute(f'SELECT *, CASE '
+                   f'WHEN {days_without_activity_is_bad} > ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) '
+                   'THEN 0 '
+                   'ELSE ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) '
+                   'END AS inactive_days '
+                   f'FROM chats WHERE id_chat = {id_chat} ORDER BY inactive_days ASC, characters DESC')
+    meaning = cursor.fetchall()
+
+    inscription_is_shown = False
+    for i in meaning:
+        if not include_admins_in_statistics:
+            its_admin = False
+            for ii in chat_admins:
+                if ii.user.id == i[1]:
+                    its_admin = True
+                    break
+            if its_admin:
+                continue
+
+        if i[9] > 0 and not inscription_is_shown:
+            inscription_is_shown = True
+            text = 'Активные участники:\n' + text
+            text += f'\nНеактивные участники \(больше {days_without_activity_is_bad} дней\):\n'  # 😴
+
+        count_messages += 1
+
+        specifics = ''
+        characters = ''
+        messages = ''
+        if not do_not_output_the_number_of_messages:
+            messages = f'сообщений: {i[6]}'
+        if not do_not_output_the_number_of_characters:
+            characters = f'символов: {i[5]}'
+
+        if sort_by_messages:
+            specifics = messages
+            if not characters == '' and not specifics == '':
+                specifics += ', '
+            specifics += characters
+        else:
+            specifics = characters
+            if not messages == '' and not specifics == '':
+                specifics += ', '
+            specifics += messages
+
+        if not specifics == '':
+            specifics = ': ' + specifics
+
+        inactive = ''
+        if i[9] > 0:
+            inactive = f' \(неактивен: {int(i[9])} дней\)'
+
+        name_user = i[2] + ' ' + i[3]
+        name_user = name_user.replace('_', '\_')
+        text += f'{count_messages}\. [{name_user}](tg://user?id={i[1]}){inactive}{specifics}\. \n'
+
+    if text == '':
+        text = 'Нет статистики для отображения\.'
+
+    await message.answer(text, parse_mode='MarkdownV2', disable_notification=True)
+
+
 async def get_start_menu(id_user):
     cursor.execute('SELECT DISTINCT chats.id_chat, settings.title FROM chats '
                    'LEFT OUTER JOIN settings ON chats.id_chat = settings.id_chat '
@@ -139,8 +224,14 @@ async def command_start(message: Message):
         await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
 
 
+@dp.message_handler(commands=['get_stat'])
+async def command_start(message: Message):
+    await message_handler(message)
+    await get_stat(message)
+
+
 @dp.callback_query_handler(text='back')
-async def choosing_a_chat_to_set_up(callback: CallbackQuery):
+async def menu_back(callback: CallbackQuery):
     text, inline_kb, one_group = await get_start_menu(callback.from_user.id)
 
     if one_group is None:
