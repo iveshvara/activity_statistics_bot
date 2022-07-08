@@ -179,10 +179,6 @@ async def process_parameter(callback: CallbackQuery):
 async def message_handler(message):
     id_chat = message.chat.id
     title = message.chat.title
-    # title = re.sub(r'([\"])',    r'\\\1', title)
-    # title = re.escape(title)
-    # title = json.dumps(title)
-    # title = shlex.quote(title)
 
     id_user = message.from_user.id
     first_name = message.from_user.first_name
@@ -259,9 +255,6 @@ async def message_handler(message):
 
     cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
     meaning = cursor.fetchone()
-
-    # title = "'" + re.sub("[^\\da-zA-Zа-яёА-ЯЁ _""]", "", title) + "'"
-    # title = ''.join([c for c in title if c in "[^\\da-zA-Zа-яёА-ЯЁ _""]"])
 
     title_result = ''
     allowed_simbols = ' _[]()"'
