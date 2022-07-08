@@ -3,17 +3,9 @@ from aiogram.dispatcher import Dispatcher
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils import executor
-from aiogram import types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from settings import TOKEN
 import sqlite3
-import re
-import json
-import shlex
-
-# import datetime
-# import asyncio
-# import aioschedule
 
 bot = Bot(TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
@@ -183,7 +175,6 @@ async def process_parameter_continuation(callback: CallbackQuery, id_chat, param
     await callback.message.edit_text(text, reply_markup=inline_kb)
 
 
-
 @dp.message_handler(commands=['get_stat'])
 async def command_start(message: Message):
     await message_handler(message)
@@ -212,7 +203,6 @@ async def get_stat(message: Message):
 
     text = ''
     count_messages = 0
-    # cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} ORDER BY characters DESC')
     cursor.execute(f'SELECT *, CASE '
                    f'WHEN {days_without_activity_is_bad} > ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) '
                    'THEN 0 '
@@ -279,10 +269,6 @@ async def get_stat(message: Message):
 async def message_handler(message):
     id_chat = message.chat.id
     title = message.chat.title
-    # title = re.sub(r'([\"])',    r'\\\1', title)
-    # title = re.escape(title)
-    # title = json.dumps(title)
-    # title = shlex.quote(title)
 
     id_user = message.from_user.id
     first_name = message.from_user.first_name
@@ -359,9 +345,6 @@ async def message_handler(message):
 
     cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
     meaning = cursor.fetchone()
-
-    # title = "'" + re.sub("[^\\da-zA-Zа-яёА-ЯЁ _""]", "", title) + "'"
-    # title = ''.join([c for c in title if c in "[^\\da-zA-Zа-яёА-ЯЁ _""]"])
 
     title_result = ''
     allowed_simbols = '_[]()"'
