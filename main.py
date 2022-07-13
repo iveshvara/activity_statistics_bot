@@ -263,6 +263,9 @@ def shielding(text):
 
 @dp.message_handler(commands=['start'])
 async def command_start(message: Message):
+    if not message.chat.type == 'private':
+        return
+
     text, inline_kb, one_group = await get_start_menu(message.from_user.id)
 
     if one_group is None:
@@ -273,9 +276,93 @@ async def command_start(message: Message):
 
 
 @dp.message_handler(commands=['get_stat'])
-async def command_start(message: Message):
+async def command_get_stat(message: Message):
+    if not message.chat.type == 'group':
+        if message.chat.type == 'private':
+            await message.answer('Эта команда работает в группе. Здесь используйте команду /start')
+        return
+
     await message_handler(message)
     await get_stat(message)
+
+
+@dp.message_handler(commands=['call_meeting'])
+async def command_call_meeting(message: Message):
+    id_chat = message.chat.id
+    id_user = message.from_user.id
+    if message.chat.type == 'group':
+        chat_admins = await bot.get_chat_administrators(id_chat)
+        its_admin = False
+        for i in chat_admins:
+            if i.user.id == id_user:
+                its_admin = True
+                break
+
+        if not its_admin:
+            await message.answer('Эту команду может вызвать только админ группы.')
+            return
+    else:
+        if message.chat.type == 'private':
+            await message.answer('Эта команда работает в группе. Здесь используйте команду /start')
+        return
+
+    await message_handler(message)
+
+    text = ''
+    count_messages = 0
+
+    cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat}')
+    meaning = cursor.fetchall()
+    for i in meaning:
+        count_messages += 1
+        name_user = i[2] + ' ' + i[3]
+        name_user = name_user.replace('_', '\_')
+        text += f'{count_messages}\. [{name_user}](tg://user?id={i[1]})\. \n'
+
+    inline_kb = add_buttons_time_selection(0)
+    await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+
+    inline_kb = add_buttons_time_selection(12)
+    await message.answer('/', parse_mode='MarkdownV2', reply_markup=inline_kb)
+
+
+def add_buttons_time_selection(shift):
+    inline_kb = InlineKeyboardMarkup(row_width=7)
+    massive = []
+    massive_line = []
+    for i in range(-1, 12, 1):
+        if i < 0 and shift > 0:
+            continue
+        value = i + shift
+        for ii in ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']:
+            i_zero = ''
+            if value > -1:
+                if value < 10:
+                    i_zero = '0'
+                i_text = i_zero + str(value) + ':00'
+                callback_data = 'call_meeting ' + ii + ' ' + i_zero + str(value)
+            else:
+                i_text = ii
+                callback_data = 'no'
+            massive_line.append(InlineKeyboardButton(text=i_text, callback_data=callback_data))
+        massive.append(massive_line)
+        massive_line = []
+
+    for massive_line in massive:
+        inline_kb.row(*massive_line)
+
+    return inline_kb
+
+
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('call_meeting '))
+async def menu_back(callback: CallbackQuery):
+    list_data = callback.data.split(' ')
+    day = list_data[1]
+    time = list_data[2]
+    id_user = callback.from_user.id
+    print(day, time, id_user)
+    await callback.answer()
+
 
 
 @dp.callback_query_handler(text='back')
@@ -413,4 +500,4 @@ async def message_handler(message):
     connect.commit()
 
 
-executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
+executor.start_polling(dp, skip_updates=False, on_startup=on_startup)
