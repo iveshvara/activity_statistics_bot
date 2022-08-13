@@ -4,7 +4,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils import executor
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from settings import TOKEN, SUPER_ADMIN_ID
+from settings import TOKEN, SUPER_ADMIN_ID, THIS_IS_BOT_NAME
 import sqlite3
 from datetime import datetime
 
@@ -25,7 +25,7 @@ async def on_startup(_):
         'CREATE TABLE IF NOT EXISTS settings(id_chat INTEGER, title TEXT, statistics_for_everyone BLOB, '
         'include_admins_in_statistics BLOB, sort_by_messages BLOB, do_not_output_the_number_of_messages BLOB, '
         'do_not_output_the_number_of_characters BLOB, period_of_activity INTEGER, report_enabled BLOB, '
-        'report_every_week BLOB, report_time TEXT)')
+        'report_every_week BLOB, report_time TEXT, enable_group BLOB)')
     connect.execute(
         'CREATE TABLE IF NOT EXISTS meetings(id_chat INTEGER, id_user INTEGER, day TEXT,'
         '_00 BLOB, _01 BLOB, _02 BLOB, _03 BLOB, _04 BLOB, _05 BLOB, _06 BLOB, _07 BLOB, _08 BLOB, _09 BLOB, _10 BLOB, _11 BLOB, '
@@ -100,13 +100,14 @@ async def get_stat(id_chat, id_user, use_username):
             # 'END AS inactive_days '
             # f'FROM chats WHERE id_chat = {id_chat} AND {period_of_activity} ORDER BY deleted ASC, inactive_days ASC, {sort} DESC'
             'SELECT chats.id_user, chats.first_name, chats.last_name, chats.username, '
-            'SUM(IFNULL(messages.characters, 0)) AS characters, SUM(1) AS messages, '
+            'SUM(IFNULL(messages.characters, 0)) AS characters, COUNT(messages.characters) AS messages, '
             'chats.deleted, chats.date_of_the_last_message, '
                 f'CASE WHEN NOT chats.deleted AND {period_of_activity} > ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) THEN 0 '
                 'ELSE ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) END AS inactive_days '
             'FROM chats '
             'LEFT JOIN messages ON chats.id_chat = messages.id_chat AND chats.id_user = messages.id_user '
-            f'WHERE chats.id_chat = {id_chat} AND {period_of_activity} > ROUND(julianday("now") - julianday(messages.date), 0) '
+                f'AND {period_of_activity} > ROUND(julianday("now") - julianday(messages.date), 0) '
+            f'WHERE chats.id_chat = {id_chat} '
             'GROUP BY chats.id_chat, chats.id_user, chats.first_name, chats.last_name, chats.username, chats.date_of_the_last_message, chats.deleted '
             f'ORDER BY deleted ASC, inactive_days ASC, {sort} DESC '
         )
@@ -129,13 +130,13 @@ async def get_stat(id_chat, id_user, use_username):
                 if its_admin(i_id_user, chat_admins):
                     continue
 
-            if i_inactive_days > 0 and i_deleted == 0 and not active_members_inscription_is_shown:
+            if i_inactive_days > 0 and not i_deleted and not active_members_inscription_is_shown:
                 active_members_inscription_is_shown = True
-                text += f'\n\n*Неактивные участники* \(больше {period_of_activity} дней\):\n'
+                text += f'\n\n*Неактивные участники* \(больше {period_of_activity} дней\):'
 
-            if i_deleted == 1 and not deleted_members_inscription_is_shown:
+            if i_deleted and not deleted_members_inscription_is_shown:
                 deleted_members_inscription_is_shown = True
-                text += f'\n\n*Вышедшие участники:*\n'
+                text += f'\n\n*Вышедшие участники:*'
 
             count_messages += 1
 
@@ -147,27 +148,29 @@ async def get_stat(id_chat, id_user, use_username):
             if not do_not_output_the_number_of_characters:
                 characters = f'символов: {i_characters}'
 
-            if sort_by_messages:
-                specifics = messages
-                if not characters == '' and not specifics == '':
-                    specifics += ', '
-                specifics += characters
-            else:
-                specifics = characters
-                if not messages == '' and not specifics == '':
-                    specifics += ', '
-                specifics += messages
-
-            if not specifics == '':
-                specifics += '\.'
-                specifics = ':\n' + specifics
-
             inactive = ''
-            if i_deleted == 1:
+            if i_deleted:
                 data_str = shielding(datetime.strptime(i_date_of_the_last_message, '%Y-%m-%d %H:%M:%S').strftime("%d.%m.%Y"))#"%d.%m.%Y %H:%M:%S"
-                inactive = f' \(вне чата с {data_str}, дней назад: {int(i_inactive_days)}\)\n'
+                inactive = f' \(вне чата с {data_str}, дней назад: {int(i_inactive_days)}\)'
             elif i_inactive_days > 0:
-                inactive = f' \(неактивен дней: {int(i_inactive_days)}\)\n'
+                inactive = f' \(неактивен дней: {int(i_inactive_days)}\)'
+            else:
+                if sort_by_messages:
+                    specifics = messages
+                    if not characters == '' and not specifics == '':
+                        specifics += ', '
+                    specifics += characters
+                else:
+                    specifics = characters
+                    if not messages == '' and not specifics == '':
+                        specifics += ', '
+                    specifics += messages
+
+                if not specifics == '':
+                    specifics += '\.'
+                    specifics = ':\n     — ' + specifics + ''
+
+                specifics += '\n'
 
             name_user = shielding(i_first_name + ' ' + i_last_name).strip()
             # if use_username and not i_username == '':
@@ -179,7 +182,7 @@ async def get_stat(id_chat, id_user, use_username):
             user = f'[{name_user}](tg://user?id={i_id_user})'
             if not i_username == '':
                 user += f' \(@{shielding(i_username)}\)'
-            text += f'\n{count_messages}\. {user}{inactive}{specifics}\n'
+            text += f'\n*{count_messages}*\. {user}{inactive}{specifics}'
 
         if text == '*Активные участники:*\n':
             text = 'Нет статистики для отображения\.'
@@ -195,9 +198,9 @@ async def get_start_menu(id_user):
     if this_is_super_admin:
         piece = ''
     else:
-        piece = f' WHERE id_user = {id_user}'
+        piece = f' AND id_user = {id_user}'
     cursor.execute('SELECT DISTINCT chats.id_chat, settings.title FROM chats '
-                   'LEFT OUTER JOIN settings ON chats.id_chat = settings.id_chat' + piece)
+                   'LEFT OUTER JOIN settings ON chats.id_chat = settings.id_chat WHERE settings.enable_group' + piece)
     meaning = cursor.fetchall()
     user_groups = []
     for i in meaning:
@@ -232,11 +235,11 @@ async def get_start_menu(id_user):
 
 
 async def setting_up_a_chat(id_chat, id_user, back_button=True):
-    cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
+    cursor.execute(f'SELECT * FROM settings WHERE enable_group AND id_chat = {id_chat}')
     meaning = cursor.fetchone()
 
     if meaning is None:
-        return
+        return '', ''
 
     inline_kb = InlineKeyboardMarkup(row_width=1)
     if meaning[2]:
@@ -328,7 +331,7 @@ async def command_start(message: Message):
         await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
 
 
-@dp.message_handler(commands=['get_stat'])
+@dp.message_handler(commands=['get_stat', 'everyone_responds'])
 async def command_get_stat(message: Message):
     if not (message.chat.type == 'group' or message.chat.type == 'supergroup'):
         if message.chat.type == 'private':
@@ -339,7 +342,13 @@ async def command_get_stat(message: Message):
 
     id_chat = message.chat.id
     id_user = message.from_user.id
-    text = await get_stat(id_chat, id_user, False)
+
+    command = message.text
+    text = ''
+    if command == 'get_stat':
+        text = await get_stat(id_chat, id_user, False)
+    elif command == 'everyone_responds':
+        text = await get_stat(id_chat, id_user, False)
 
     await message.answer(text, parse_mode='MarkdownV2', disable_notification=True)
 
@@ -513,7 +522,108 @@ async def process_parameter(callback: CallbackQuery):
 @dp.message_handler(content_types='any')
 async def message_handler(message):
     id_chat = message.chat.id
-    title = "'" + shielding(message.chat.title) + "'"
+    date_of_the_last_message = message.date
+
+    skip_content_type = ('delete_chat_photo', 'migrate_from_chat_id', 'pinned_message')
+    created_title_content_type = ('group_chat_created', 'supergroup_chat_created', 'channel_chat_created')
+
+    if len(message.entities) == 1 and message.entities[0].type == 'bot_command':
+        return
+
+    elif message.content_type in skip_content_type:
+        return
+
+    elif message.content_type in created_title_content_type:
+        title = "'" + shielding(message.chat.title) + "'"
+        cursor.execute(
+            'INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, '
+            'sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, '
+            'period_of_activity, report_enabled, report_every_week, report_time, enable_group) '
+            f'VALUES ({id_chat}, {title}, False, False, False, False, False, 7, False, False, "00:00", True)')
+        connect.commit()
+
+        return
+
+    elif message.content_type == 'new_chat_title':
+        title = "'" + shielding(message.chat.title) + "'"
+        cursor.execute(f'UPDATE settings SET title = {title} WHERE id_chat = {id_chat}')
+        connect.commit()
+
+        return
+
+    elif message.content_type == 'migrate_to_chat_id':
+        new_id_chat = message.migrate_to_chat_id
+        cursor.execute(f'UPDATE chats SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
+        cursor.execute(f'UPDATE meetings SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
+        cursor.execute(f'UPDATE messages SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
+        cursor.execute(f'UPDATE settings SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
+        connect.commit()
+
+        return
+
+    elif message.content_type == 'new_chat_members':
+        for i in message.new_chat_members:
+            if i.is_bot:
+                if i.username == THIS_IS_BOT_NAME:
+                    title = "'" + shielding(message.chat.title) + "'"
+
+                    cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
+                    meaning = cursor.fetchone()
+                    if meaning is None:
+                        cursor.execute(
+                            'INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, '
+                            'sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, '
+                            'period_of_activity, report_enabled, report_every_week, report_time, enable_group) '
+                            f'VALUES ({id_chat}, {title}, False, False, False, False, False, 7, False, False, "00:00", True)')
+                    else:
+                        cursor.execute(f'UPDATE settings SET enable_group = True, title = {title} WHERE id_chat = {id_chat}')
+                    connect.commit()
+
+            else:
+                i_last_name = i.last_name
+                if i_last_name is None:
+                    i_last_name = ''
+
+                i_username = i.username
+                if i_username is None:
+                    i_username = ''
+
+                cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {i.id}')
+                meaning = cursor.fetchone()
+                if meaning is None:
+                    cursor.execute(
+                        'INSERT INTO chats (id_chat, id_user, first_name, last_name, username, '
+                        'messages, characters, deleted, date_of_the_last_message) '
+                        f'VALUES ({id_chat}, {i.id}, "{i.first_name}", "{i_last_name}", '
+                        f'"{i_username}", 0, 0, False, "{date_of_the_last_message}")')
+                else:
+                    cursor.execute(
+                        f'UPDATE chats SET deleted = False WHERE id_chat = {id_chat} AND id_user = {i.id}')
+
+                # cursor.execute('INSERT INTO messages (id_chat, id_user, date, characters) '
+                #                f'VALUES ({id_chat}, {i.id}, "{date_of_the_last_message}", 0)')
+                connect.commit()
+
+        return
+
+    elif message.content_type == 'left_chat_member':
+        i = message.left_chat_member
+        if i.is_bot:
+            if i.username == THIS_IS_BOT_NAME:
+                cursor.execute(f'UPDATE settings SET enable_group = False WHERE id_chat = {id_chat}')
+        else:
+            # cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {i.id}')
+            # meaning = cursor.fetchone()
+            # if meaning is not None:
+            cursor.execute(f'UPDATE chats SET deleted = True, date_of_the_last_message = "{date_of_the_last_message}" '
+                           f'WHERE id_chat = {id_chat} AND id_user = {i.id}')
+
+            # cursor.execute('INSERT INTO messages (id_chat, id_user, date, characters) '
+            #                f'VALUES ({id_chat}, {i.id}, "{date_of_the_last_message}", 0)')
+
+            connect.commit()
+
+        return
 
     id_user = message.from_user.id
     first_name = message.from_user.first_name
@@ -524,11 +634,8 @@ async def message_handler(message):
     if username is None:
         username = ''
     characters = 0
-    date_of_the_last_message = message.date
 
-    if len(message.entities) == 1 and message.entities[0].type == 'bot_command':
-        pass
-    elif message.content_type == 'text':
+    if message.content_type == 'text':
         if message.from_user.is_bot:
             return
         characters = len(message.text)
@@ -538,41 +645,6 @@ async def message_handler(message):
         characters = len(message.poll.question)
         for i in message.poll.options:
             characters += len(i.text)
-
-    if message.content_type == 'new_chat_members':
-        for i in message.new_chat_members:
-            if i.is_bot:
-                continue
-
-            i_last_name = i.last_name
-            if i_last_name is None:
-                i_last_name = ''
-
-            i_username = i.username
-            if i_username is None:
-                i_username = ''
-
-            cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {i.id}')
-            meaning = cursor.fetchone()
-            if meaning is None:
-                cursor.execute(
-                    'INSERT INTO chats (id_chat, id_user, first_name, last_name, username, '
-                    'messages, characters, deleted, date_of_the_last_message) '
-                    f'VALUES ({id_chat}, {i.id}, "{i.first_name}", "{i_last_name}", '
-                    f'"{i_username}", 0, 0, False, "{date_of_the_last_message}")')
-            else:
-                cursor.execute(
-                    f'UPDATE chats SET deleted = False WHERE id_chat = {id_chat} AND id_user = {i.id}')
-            connect.commit()
-    elif message.content_type == 'left_chat_member':
-        i = message.left_chat_member
-        if not i.is_bot:
-            cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {i.id}')
-            meaning = cursor.fetchone()
-            if meaning is not None:
-                cursor.execute(f'UPDATE chats SET deleted = True, date_of_the_last_message = "{date_of_the_last_message}" '
-                               f'WHERE id_chat = {id_chat} AND id_user = {i.id}')
-            connect.commit()
 
     if message.from_user.is_bot:
         return
@@ -600,20 +672,6 @@ async def message_handler(message):
                        f'deleted = False, '
                        f'date_of_the_last_message = "{date_of_the_last_message}" '
                        f'WHERE id_chat = {id_chat} AND id_user = {id_user}')
-    connect.commit()
-
-    cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
-    meaning = cursor.fetchone()
-
-    if meaning is None:
-        cursor.execute(
-            'INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, '
-            'sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, '
-            'period_of_activity, report_enabled, report_every_week, report_time) ' 
-            f'VALUES ({id_chat}, {title}, False, False, False, False, False, 7, False, False, "00:00")')
-        connect.commit()
-    else:
-        cursor.execute(f'UPDATE settings SET title = {title} WHERE id_chat = {id_chat}')
     connect.commit()
 
 
