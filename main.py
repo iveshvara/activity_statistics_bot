@@ -112,10 +112,10 @@ async def get_stat(id_chat, id_user, use_username):
                 CASE WHEN NOT chats.deleted AND {period_of_activity} > ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) THEN 0 
                 ELSE ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) END AS inactive_days,
                 (SELECT COUNT(DISTINCT message_id) FROM messages 
-                WHERE chats.id_chat = messages.id_chat AND messages.message_id IS NOT NULL AND 7 > ROUND(julianday("now") - julianday(date), 0)) AS requests,
+                WHERE chats.id_chat = messages.id_chat AND messages.message_id IS NOT NULL AND NOT messages.message_id = 0 AND 7 > ROUND(julianday("now") - julianday(date), 0)) AS requests,
                 (SELECT COUNT(DISTINCT messages_two.message_id) FROM messages AS messages_one 
                 INNER JOIN messages AS messages_two ON messages_one.id_chat = messages_two.id_chat AND messages_one.message_id = messages_two.message_id AND chats.id_user = messages_two.id_user
-                WHERE chats.id_chat = messages_one.id_chat AND messages_one.message_id IS NOT NULL AND 7 > ROUND(julianday("now") - julianday(messages_one.date), 0)) AS response 
+                WHERE chats.id_chat = messages_one.id_chat AND messages_one.message_id IS NOT NULL AND NOT messages_one.message_id = 0 AND 7 > ROUND(julianday("now") - julianday(messages_one.date), 0)) AS response 
             FROM chats 
             LEFT JOIN messages ON chats.id_chat = messages.id_chat AND chats.id_user = messages.id_user 
                 AND {period_of_activity} > ROUND(julianday("now") - julianday(messages.date), 0) 
