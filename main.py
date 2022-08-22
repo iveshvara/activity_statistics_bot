@@ -27,7 +27,7 @@ async def on_startup(_):
         'CREATE TABLE IF NOT EXISTS settings(id_chat INTEGER, title TEXT, statistics_for_everyone BLOB, '
         'include_admins_in_statistics BLOB, sort_by_messages BLOB, do_not_output_the_number_of_messages BLOB, '
         'do_not_output_the_number_of_characters BLOB, period_of_activity INTEGER, report_enabled BLOB, '
-        'report_every_week BLOB, report_time TEXT, enable_group BLOB)')
+        'report_every_week BLOB, report_time TEXT, enable_group BLOB, last_notify_date TEXT)')
     connect.execute(
         'CREATE TABLE IF NOT EXISTS meetings(id_chat INTEGER, id_user INTEGER, day TEXT,'
         '_00 BLOB, _01 BLOB, _02 BLOB, _03 BLOB, _04 BLOB, _05 BLOB, _06 BLOB, _07 BLOB, _08 BLOB, _09 BLOB, _10 BLOB, _11 BLOB, '
@@ -44,25 +44,6 @@ async def scheduler():
         await asyncio.sleep(1)
 
 
-async def run_reminder():
-    qwe = 1
-    # cursor.execute(f'''SELECT
-    #                 users.id_user, users.last_message_id,
-    #                 datetime("now", users.uts || " hour", "start of day", "1 day") AS user_date,
-    #                 calendars.parana_from, calendars.parana_to, calendars.parana_after,
-    #                 strftime("%Y-%m-%d %H:%M:00", datetime("now", users.uts || " hour")) AS parana_date
-    #             FROM users LEFT JOIN calendars ON users.id_user = calendars.id_user
-    #             WHERE users.reminder > 0
-    #                 AND calendars.event < CASE WHEN users.reminder = 2 THEN 10 ELSE 1 END
-    #                 AND (strftime("%H:%M", time("now", users.uts || " hour")) = strftime("%H:%M", time(users.notification_time))
-    #                     AND calendars.date = user_date
-    #                     OR strftime("%Y-%m-%d %H:%M:00", calendars.parana_from) = parana_date
-    #                     OR strftime("%Y-%m-%d %H:%M:00", calendars.parana_after) = parana_date)''')
-    #
-    # result_tuple = cursor.fetchall()
-    # for i in result_tuple:
-
-
 def its_admin(id_user, chat_admins):
     if id_user == SUPER_ADMIN_ID:
         return True
@@ -74,7 +55,7 @@ def its_admin(id_user, chat_admins):
     return False
 
 
-async def get_stat(id_chat, id_user, use_username):
+async def get_stat(id_chat, id_user=None):
     statistics_for_everyone = False
     include_admins_in_statistics = False
     try:
@@ -96,7 +77,7 @@ async def get_stat(id_chat, id_user, use_username):
         do_not_output_the_number_of_messages = meaning[5]
         do_not_output_the_number_of_characters = meaning[6]
 
-    if statistics_for_everyone or its_admin(id_user, chat_admins):
+    if statistics_for_everyone or its_admin(id_user, chat_admins) or id_user == None:
         text = '*Активные участники:*\n'
 
         if sort_by_messages:
@@ -196,16 +177,7 @@ async def get_stat(id_chat, id_user, use_username):
 
                 specifics += '\n'
 
-            name_user = shielding(i_first_name + ' ' + i_last_name).strip()
-            # if use_username and not i_username == '':
-            #     # user = '@' + i_username
-            #     user = f'[{name_user}](http://t.me/{i_username})'
-            # else:
-            #     user = f'[{name_user}](tg://user?id={i_id_user})'
-            # если ошибка сохранится, то нужно попробовать хтмл разметку
-            user = f'[{name_user}](tg://user?id={i_id_user})'
-            if not i_username == '':
-                user += f' \(@{shielding(i_username)}\)'
+            user = await get_name_tg(id_user, i_first_name, i_last_name, i_username)
             text += f'\n*{count_messages}*\. {user}{inactive}{specifics}'
 
         if text == '*Активные участники:*\n':
@@ -278,7 +250,7 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
     inline_kb.add(InlineKeyboardButton(text='Не выводить количество сообщений: ' + convert_bool(meaning[5]), callback_data=f'settings {id_chat} do_not_output_the_number_of_messages {meaning[5]}'))
     inline_kb.add(InlineKeyboardButton(text='Не выводить количество символов: ' + convert_bool(meaning[6]), callback_data=f'settings {id_chat} do_not_output_the_number_of_characters {meaning[6]}'))
     inline_kb.add(InlineKeyboardButton(text='Статистика за период (дней): ' + str(meaning[7]), callback_data=f'settings {id_chat} period_of_activity {meaning[7]}'))
-    # inline_kb.add(InlineKeyboardButton(text='Автоматический отчет в чат: ' + convert_bool(meaning[7]), callback_data=f'settings {id_chat} report_enabled {meaning[8]}'))
+    inline_kb.add(InlineKeyboardButton(text='Автоматический отчет в чат: ' + convert_bool(meaning[8]), callback_data=f'settings {id_chat} report_enabled {meaning[8]}'))
     # if meaning[9]:
     #     inline_kb.add(InlineKeyboardButton(text='Отчет каждую неделю', callback_data=f'settings {id_chat} report_every_week {meaning[9]}'))
     # else:
@@ -288,7 +260,7 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
     if back_button:
         inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
 
-    text = await get_stat(id_chat, id_user, True)
+    text = await get_stat(id_chat, id_user)
     #group_name = shielding(meaning[1])
     group_name = meaning[1]
     return '*Группа "' + group_name + '"\.*\n\n' + text, inline_kb
@@ -341,6 +313,95 @@ def shielding(text):
     return text_result
 
 
+async def get_name_tg(id_user, first_name, last_name, username):
+    name_user = shielding(first_name + ' ' + last_name).strip()
+    # if use_username and not i_username == '':
+    #     # user = '@' + i_username
+    #     user = f'[{name_user}](http://t.me/{i_username})'
+    # else:
+    #     user = f'[{name_user}](tg://user?id={i_id_user})'
+    # если ошибка сохранится, то нужно попробовать хтмл разметку
+    user = f'[{name_user}](tg://user?id={id_user})'
+    if not username == '':
+        user += f' \(@{shielding(username)}\)'
+
+    return user
+
+
+async def run_reminder():
+    cursor.execute('SELECT * FROM settings WHERE strftime("%w", date("now")) = "1" AND date("now") > date(last_notify_date) AND report_enabled = 1 AND enable_group = 1')
+    result_tuple = cursor.fetchall()
+    for i in result_tuple:
+        id_chat = i[0]
+        text = await get_stat(id_chat)
+        if not text == '' and not text == 'Нет статистики для отображения.':
+            await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
+            cursor.execute(f'UPDATE settings SET last_notify_date = datetime("now") WHERE id_chat = {id_chat}')
+            connect.commit()
+
+    text = ''
+
+    cursor.execute(
+        '''SELECT DISTINCT
+            messages_one.id_chat AS id_chat,
+            messages_two.id_user,
+            chats.first_name,
+            chats.last_name,
+            chats.username 
+        FROM
+            messages AS messages_one
+            LEFT JOIN settings ON settings.id_chat = messages_one.id_chat
+            LEFT JOIN messages AS messages_two ON messages_one.id_chat = messages_two.id_chat
+                    AND messages_one.message_id = messages_two.message_id
+                    AND messages_one.message_id > 0
+            LEFT JOIN chats ON messages_two.id_chat = chats.id_chat
+                    AND messages_two.id_user = chats.id_user
+        WHERE
+            messages_one.message_id > 0
+            AND settings.enable_group = 1
+            AND settings.period_of_activity > Round(JulianDay("now") - JulianDay(messages_one.date), 0)
+            AND Date(settings.last_notify_message_id_date) < Date("now")
+        GROUP BY
+            messages_one.id_chat,
+            messages_two.id_user,
+            chats.first_name,
+            chats.last_name,
+            chats.username,
+            messages_one.message_id
+        ORDER BY
+            id_chat'''
+    )
+    result_tuple = cursor.fetchall()
+    last_id_chat = None
+    tuple = []
+    for i in result_tuple:
+        id_chat = i[0]
+        if not last_id_chat == id_chat:
+            if last_id_chat is None:
+                last_id_chat = id_chat
+            else:
+                tuple.append((last_id_chat, text))
+                text = ''
+                last_id_chat = id_chat
+
+        id_user = i[1]
+        first_name = i[2]
+        last_name = i[3]
+        username = i[4]
+        text += await get_name_tg(id_user, first_name, last_name, username)
+    else:
+        if last_id_chat is not None:
+            tuple.append([last_id_chat, text])
+
+    for i in tuple:
+        id_chat = i[0]
+        text = i[1]
+        text = 'Сегодня не откликнулись на запрос\: \n' + text
+        await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
+        cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
+        connect.commit()
+
+
 @dp.message_handler(commands=['start'])
 async def command_start(message: Message):
     if not message.chat.type == 'private':
@@ -370,7 +431,7 @@ async def command_get_stat(message: Message):
     command = message.text.split('@')[0]
     text = ''
     if command == '/get_stat':
-        text = await get_stat(id_chat, id_user, False)
+        text = await get_stat(id_chat, id_user)
     elif command == '/test':
         text = ''
 
@@ -561,10 +622,12 @@ async def message_handler(message):
     elif message.content_type in created_title_content_type:
         title = "'" + shielding(message.chat.title) + "'"
         cursor.execute(
-            'INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, '
-            'sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, '
-            'period_of_activity, report_enabled, report_every_week, report_time, enable_group) '
-            f'VALUES ({id_chat}, {title}, False, False, False, False, False, 7, False, False, "00:00", True)')
+            f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
+            sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
+            period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
+            last_notify_date, last_notify_message_id_date) '
+            VALUES ({id_chat}, {title}, False, False, False, False, False, 7, False, False, "00:00", True, 
+            datetime("now"), datetime("now"))''')
         connect.commit()
 
         return
@@ -596,10 +659,12 @@ async def message_handler(message):
                     meaning = cursor.fetchone()
                     if meaning is None:
                         cursor.execute(
-                            'INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, '
-                            'sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, '
-                            'period_of_activity, report_enabled, report_every_week, report_time, enable_group) '
-                            f'VALUES ({id_chat}, {title}, False, False, False, False, False, 7, False, False, "00:00", True)')
+                            f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
+                            sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
+                            period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
+                            last_notify_date, last_notify_message_id_date) 
+                            VALUES ({id_chat}, {title}, False, False, False, False, False, 7, False, False, "00:00", True, 
+                            datetime("now"), datetime("now"))''')
                     else:
                         cursor.execute(f'UPDATE settings SET enable_group = True, title = {title} WHERE id_chat = {id_chat}')
                     connect.commit()
@@ -662,7 +727,23 @@ async def message_handler(message):
                 chat_admins = await bot.get_chat_administrators(id_chat)
                 if its_admin(id_user, chat_admins):
                     message_id = message.message_id
-                    await message.reply('Принято\.', parse_mode='MarkdownV2', disable_notification=True)
+                    cursor.execute(f'SELECT id_user, first_name, last_name, username FROM chats WHERE id_chat = {id_chat} AND deleted = 0')
+                    result = cursor.fetchall()
+                    text = 'Внимание\! Общий опрос\: \n'
+                    for i in result:
+                        i_id_user = i[0]
+                        i_first_name = i[1]
+                        i_last_name = i[2]
+                        i_username = i[3]
+                        name_user = shielding(i_first_name + ' ' + i_last_name).strip()
+                        user = f'[{name_user}](tg://user?id={i_id_user})'
+                        if not i_username == '':
+                            user += f' \(@{shielding(i_username)}\)'
+                        text += user + '\n'
+                    text += 'Чтобы ваш ответ был учтен, необходимо ответить на сообщение куратора, т\.е\. нажать на сообщение куратора и выбрать ответить\.'
+                    await message.reply(text, parse_mode='MarkdownV2', disable_notification=True)
+                    cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
+                    connect.commit()
             except Exception:
                 pass
         if message.reply_to_message is not None:
