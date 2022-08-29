@@ -329,7 +329,7 @@ async def get_name_tg(id_user, first_name, last_name, username):
 
 
 async def run_reminder():
-    cursor.execute('SELECT * FROM settings WHERE strftime("%w", date("now")) = "1" AND date("now") > date(last_notify_date) AND report_enabled = 1 AND enable_group = 1')
+    cursor.execute('SELECT * FROM settings WHERE strftime("%w", date("now")) = "1" AND date("now") > date(last_notify_date) AND report_enabled AND enable_group')
     result_tuple = cursor.fetchall()
     for i in result_tuple:
         id_chat = i[0]
@@ -358,7 +358,7 @@ async def run_reminder():
                     AND messages_two.id_user = chats.id_user
         WHERE
             messages_one.message_id > 0
-            AND settings.enable_group = 1
+            AND settings.enable_group
             AND settings.period_of_activity > Round(JulianDay("now") - JulianDay(messages_one.date), 0)
             AND Date(settings.last_notify_message_id_date) < Date("now")
         GROUP BY
@@ -396,7 +396,7 @@ async def run_reminder():
     for i in tuple:
         id_chat = i[0]
         text = i[1]
-        text = 'Сегодня не откликнулись на запрос\: \n' + text
+        text = 'Сегодня не откликнулись на запрос\: \n' + text + '\n #ВажноеСообщение'
         await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
         cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
         connect.commit()
@@ -740,7 +740,8 @@ async def message_handler(message):
                         if not i_username == '':
                             user += f' \(@{shielding(i_username)}\)'
                         text += user + '\n'
-                    text += 'Чтобы ваш ответ был учтен, необходимо ответить на сообщение куратора, т\.е\. нажать на сообщение куратора и выбрать ответить\.'
+                    text += 'Чтобы ваш ответ был учтен, необходимо ответить на сообщение куратора, т\.е\. нажать на сообщение куратора и выбрать \"Ответить\"\.'
+                    text += '\n \#ВажноеСообщение'
                     await message.reply(text, parse_mode='MarkdownV2', disable_notification=True)
                     cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
                     connect.commit()
