@@ -620,21 +620,21 @@ async def message_handler(message):
         return
 
     elif message.content_type in created_title_content_type:
-        title = "'" + shielding(message.chat.title) + "'"
+        title = shielding(message.chat.title)
         cursor.execute(
             f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
             sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
             period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
-            last_notify_date, last_notify_message_id_date) '
-            VALUES ({id_chat}, {title}, False, False, False, False, False, 7, False, False, "00:00", True, 
+            last_notify_date, last_notify_message_id_date) 
+            VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, False, "00:00", True, 
             datetime("now"), datetime("now"))''')
         connect.commit()
 
         return
 
     elif message.content_type == 'new_chat_title':
-        title = "'" + shielding(message.chat.title) + "'"
-        cursor.execute(f'UPDATE settings SET title = {title} WHERE id_chat = {id_chat}')
+        title = shielding(message.chat.title)
+        cursor.execute(f'UPDATE settings SET title = "{title}" WHERE id_chat = {id_chat}')
         connect.commit()
 
         return
@@ -653,7 +653,7 @@ async def message_handler(message):
         for i in message.new_chat_members:
             if i.is_bot:
                 if i.username == THIS_IS_BOT_NAME:
-                    title = "'" + shielding(message.chat.title) + "'"
+                    title = shielding(message.chat.title)
 
                     cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
                     meaning = cursor.fetchone()
@@ -663,10 +663,10 @@ async def message_handler(message):
                             sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
                             period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
                             last_notify_date, last_notify_message_id_date) 
-                            VALUES ({id_chat}, {title}, False, False, False, False, False, 7, False, False, "00:00", True, 
+                            VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, False, "00:00", True, 
                             datetime("now"), datetime("now"))''')
                     else:
-                        cursor.execute(f'UPDATE settings SET enable_group = True, title = {title} WHERE id_chat = {id_chat}')
+                        cursor.execute(f'UPDATE settings SET enable_group = True, title = "{title}" WHERE id_chat = {id_chat}')
                     connect.commit()
 
             else:
