@@ -177,7 +177,7 @@ async def get_stat(id_chat, id_user=None):
 
                 specifics += '\n'
 
-            user = await get_name_tg(id_user, i_first_name, i_last_name, i_username)
+            user = await get_name_tg(i_id_user, i_first_name, i_last_name, i_username)
             text += f'\n*{count_messages}*\. {user}{inactive}{specifics}'
 
         if text == '*Активные участники:*\n':
