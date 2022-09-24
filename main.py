@@ -3,7 +3,7 @@ from aiogram.dispatcher import Dispatcher
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils import executor
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ChatJoinRequest
 from settings import TOKEN, SUPER_ADMIN_ID, THIS_IS_BOT_NAME
 import sqlite3
 from datetime import datetime
@@ -19,19 +19,23 @@ cursor = connect.cursor()
 
 async def on_startup(_):
     connect.execute(
-        'CREATE TABLE IF NOT EXISTS chats(id_chat INTEGER, id_user INTEGER, first_name TEXT, last_name TEXT, '
-        'username TEXT, characters INTEGER, messages INTEGER, date_of_the_last_message TEXT, deleted BLOB)')
+        '''CREATE TABLE IF NOT EXISTS chats(id_chat INTEGER, id_user INTEGER, first_name TEXT, last_name TEXT, 
+        username TEXT, characters INTEGER, messages INTEGER, date_of_the_last_message TEXT, deleted BLOB, 
+        state TEXT, message_id TEXT)''')
     connect.execute(
-        'CREATE TABLE IF NOT EXISTS messages(id_chat INTEGER, id_user INTEGER, date TEXT, characters INTEGER, message_id INTEGER)')
+        '''CREATE TABLE IF NOT EXISTS messages(id_chat INTEGER, id_user INTEGER, date TEXT, characters INTEGER, 
+        message_id INTEGER)''')
     connect.execute(
-        'CREATE TABLE IF NOT EXISTS settings(id_chat INTEGER, title TEXT, statistics_for_everyone BLOB, '
-        'include_admins_in_statistics BLOB, sort_by_messages BLOB, do_not_output_the_number_of_messages BLOB, '
-        'do_not_output_the_number_of_characters BLOB, period_of_activity INTEGER, report_enabled BLOB, '
-        'report_every_week BLOB, report_time TEXT, enable_group BLOB, last_notify_date TEXT)')
+        '''CREATE TABLE IF NOT EXISTS settings(id_chat INTEGER, title TEXT, statistics_for_everyone BLOB, 
+        include_admins_in_statistics BLOB, sort_by_messages BLOB, do_not_output_the_number_of_messages BLOB, 
+        do_not_output_the_number_of_characters BLOB, period_of_activity INTEGER, report_enabled BLOB, 
+        report_every_week BLOB, report_time TEXT, enable_group BLOB, last_notify_date TEXT, 
+        channel TEXT, channel_discussion_group_id TEXT)''')
     connect.execute(
-        'CREATE TABLE IF NOT EXISTS meetings(id_chat INTEGER, id_user INTEGER, day TEXT,'
-        '_00 BLOB, _01 BLOB, _02 BLOB, _03 BLOB, _04 BLOB, _05 BLOB, _06 BLOB, _07 BLOB, _08 BLOB, _09 BLOB, _10 BLOB, _11 BLOB, '
-        '_12 BLOB, _13 BLOB, _14 BLOB, _15 BLOB, _16 BLOB, _17 BLOB, _18 BLOB, _19 BLOB, _20 BLOB, _21 BLOB, _22 BLOB, _23 BLOB)')
+        '''CREATE TABLE IF NOT EXISTS meetings(id_chat INTEGER, id_user INTEGER, day TEXT,
+        _00 BLOB, _01 BLOB, _02 BLOB, _03 BLOB, _04 BLOB, _05 BLOB, _06 BLOB, _07 BLOB, _08 BLOB, _09 BLOB, 
+        _10 BLOB, _11 BLOB, _12 BLOB, _13 BLOB, _14 BLOB, _15 BLOB, _16 BLOB, _17 BLOB, _18 BLOB, _19 BLOB, 
+        _20 BLOB, _21 BLOB, _22 BLOB, _23 BLOB)''')
     connect.commit()
 
     asyncio.create_task(scheduler())
@@ -251,11 +255,7 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
     inline_kb.add(InlineKeyboardButton(text='Не выводить количество символов: ' + convert_bool(meaning[6]), callback_data=f'settings {id_chat} do_not_output_the_number_of_characters {meaning[6]}'))
     inline_kb.add(InlineKeyboardButton(text='Статистика за период (дней): ' + str(meaning[7]), callback_data=f'settings {id_chat} period_of_activity {meaning[7]}'))
     inline_kb.add(InlineKeyboardButton(text='Автоматический отчет в чат: ' + convert_bool(meaning[8]), callback_data=f'settings {id_chat} report_enabled {meaning[8]}'))
-    # if meaning[9]:
-    #     inline_kb.add(InlineKeyboardButton(text='Отчет каждую неделю', callback_data=f'settings {id_chat} report_every_week {meaning[9]}'))
-    # else:
-    #     inline_kb.add(InlineKeyboardButton(text='Отчет каждый день', callback_data=f'settings {id_chat} report_every_week {meaning[9]}'))
-    # inline_kb.add(InlineKeyboardButton(text='Время отправки отчета: ' + meaning[9], callback_data=f'settings {id_chat} report_time {meaning[10]}'))
+    inline_kb.add(InlineKeyboardButton(text='Ссылка на канал: ' + meaning[14], callback_data=f'settings {id_chat} channel {meaning[14]}'))
 
     if back_button:
         inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
@@ -396,7 +396,7 @@ async def run_reminder():
     for i in tuple:
         id_chat = i[0]
         text = i[1]
-        text = 'Сегодня не откликнулись на запрос\: \n' + text + '\n #ВажноеСообщение'
+        text = 'Сегодня не откликнулись на запрос\: \n' + text + '\n \#ВажноеСообщение'
         await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
         cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
         connect.commit()
@@ -404,8 +404,6 @@ async def run_reminder():
 
 @dp.message_handler(commands=['start'])
 async def command_start(message: Message):
-    if not message.chat.type == 'private':
-        return
     id_user = message.from_user.id
     text, inline_kb, one_group = await get_start_menu(id_user)
 
@@ -577,7 +575,9 @@ async def process_parameter(callback: CallbackQuery):
     list_str = callback.data.split()
     id_chat = int(list_str[1])
     parameter_name = list_str[2]
-    parameter_value = list_str[3]
+    parameter_value = ''
+    if len(list_str) > 3:
+        parameter_value = list_str[3]
 
     # no_blob_parameters = ['period_of_activity', 'report_time']
     # if parameter_name in no_blob_parameters:
@@ -597,6 +597,13 @@ async def process_parameter(callback: CallbackQuery):
             parameter_value_int = 1
         parameter_value_int += adding
         await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value_int)
+    if parameter_name == 'channel':
+        cursor.execute(f'UPDATE chats SET state = "channel", message_id = {callback.message.message_id} WHERE id_user = {id_user} AND id_chat = {id_chat}')
+        connect.commit()
+        inline_kb = InlineKeyboardMarkup(row_width=1)
+        inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
+        text = shielding('Пришлите пригласительную ссылку на канал, где вы будете публиковать закрытые учебные материалы в виде https://t.me/+SAqGflBSoqpYv2W4')
+        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
     else:
         if parameter_value == '0':
             parameter_value = '1'
@@ -607,187 +614,221 @@ async def process_parameter(callback: CallbackQuery):
 
 @dp.message_handler(content_types='any')
 async def message_handler(message):
-    id_chat = message.chat.id
-    date_of_the_last_message = message.date
+    if message.chat.type == 'private':
+        id_user = message.from_user.id
+        cursor.execute(f'SELECT id_chat, message_id FROM chats WHERE id_user = {id_user} AND state = "channel"')
+        result = cursor.fetchone()
+        if result is None:
+            return
+        id_chat = result[0]
+        message_id = result[1]
 
-    skip_content_type = ('delete_chat_photo', 'migrate_from_chat_id', 'pinned_message')
-    created_title_content_type = ('group_chat_created', 'supergroup_chat_created', 'channel_chat_created')
-
-    if len(message.entities) == 1 and message.entities[0].type == 'bot_command':
-        return
-
-    elif message.content_type in skip_content_type:
-        return
-
-    elif message.content_type in created_title_content_type:
-        title = shielding(message.chat.title)
-        cursor.execute(
-            f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
-            sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
-            period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
-            last_notify_date, last_notify_message_id_date) 
-            VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, False, "00:00", True, 
-            datetime("now"), datetime("now"))''')
+        cursor.execute(f'UPDATE settings SET channel = "{message.text}" WHERE id_chat = {id_chat}')
+        cursor.execute(f'UPDATE chats SET state = "", message_id = 0 WHERE id_user = {id_user} AND id_chat = {id_chat}')
         connect.commit()
 
-        return
+        await message.delete()
 
-    elif message.content_type == 'new_chat_title':
-        title = shielding(message.chat.title)
-        cursor.execute(f'UPDATE settings SET title = "{title}" WHERE id_chat = {id_chat}')
-        connect.commit()
+        text, inline_kb = await setting_up_a_chat(id_chat, id_user)
+        await bot.edit_message_text(text=text, chat_id=id_user, message_id=message_id, reply_markup=inline_kb, parse_mode='MarkdownV2')
 
-        return
+    else:
+        id_chat = message.chat.id
+        date_of_the_last_message = message.date
 
-    elif message.content_type == 'migrate_to_chat_id':
-        new_id_chat = message.migrate_to_chat_id
-        cursor.execute(f'UPDATE chats SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
-        cursor.execute(f'UPDATE meetings SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
-        cursor.execute(f'UPDATE messages SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
-        cursor.execute(f'UPDATE settings SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
-        connect.commit()
+        skip_content_type = ('delete_chat_photo', 'migrate_from_chat_id', 'pinned_message')
+        created_title_content_type = ('group_chat_created', 'supergroup_chat_created', 'channel_chat_created')
 
-        return
+        if len(message.entities) == 1 and message.entities[0].type == 'bot_command':
+            return
 
-    elif message.content_type == 'new_chat_members':
-        for i in message.new_chat_members:
-            if i.is_bot:
-                if i.username == THIS_IS_BOT_NAME:
-                    title = shielding(message.chat.title)
+        elif message.content_type in skip_content_type:
+            return
 
-                    cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
+        elif message.content_type in created_title_content_type:
+            title = shielding(message.chat.title)
+            cursor.execute(
+                f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
+                sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
+                period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
+                last_notify_date, last_notify_message_id_date) 
+                VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, False, "00:00", True, 
+                datetime("now"), datetime("now"))''')
+            connect.commit()
+
+            return
+
+        elif message.content_type == 'new_chat_title':
+            title = shielding(message.chat.title)
+            cursor.execute(f'UPDATE settings SET title = "{title}" WHERE id_chat = {id_chat}')
+            connect.commit()
+
+            return
+
+        elif message.content_type == 'migrate_to_chat_id':
+            new_id_chat = message.migrate_to_chat_id
+            cursor.execute(f'UPDATE chats SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
+            cursor.execute(f'UPDATE meetings SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
+            cursor.execute(f'UPDATE messages SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
+            cursor.execute(f'UPDATE settings SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
+            connect.commit()
+
+            return
+
+        elif message.content_type == 'new_chat_members':
+            for i in message.new_chat_members:
+                if i.is_bot:
+                    if i.username == THIS_IS_BOT_NAME:
+                        title = shielding(message.chat.title)
+
+                        cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
+                        meaning = cursor.fetchone()
+                        if meaning is None:
+                            cursor.execute(
+                                f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
+                                sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
+                                period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
+                                last_notify_date, last_notify_message_id_date) 
+                                VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, False, "00:00", True, 
+                                datetime("now"), datetime("now"))''')
+                        else:
+                            cursor.execute(f'UPDATE settings SET enable_group = True, title = "{title}" WHERE id_chat = {id_chat}')
+                        connect.commit()
+
+                else:
+                    i_last_name = i.last_name
+                    if i_last_name is None:
+                        i_last_name = ''
+
+                    i_username = i.username
+                    if i_username is None:
+                        i_username = ''
+
+                    cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {i.id}')
                     meaning = cursor.fetchone()
                     if meaning is None:
                         cursor.execute(
-                            f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
-                            sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
-                            period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
-                            last_notify_date, last_notify_message_id_date) 
-                            VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, False, "00:00", True, 
-                            datetime("now"), datetime("now"))''')
+                            'INSERT INTO chats (id_chat, id_user, first_name, last_name, username, '
+                            'messages, characters, deleted, date_of_the_last_message) '
+                            f'VALUES ({id_chat}, {i.id}, "{i.first_name}", "{i_last_name}", '
+                            f'"{i_username}", 0, 0, False, "{date_of_the_last_message}")')
                     else:
-                        cursor.execute(f'UPDATE settings SET enable_group = True, title = "{title}" WHERE id_chat = {id_chat}')
+                        cursor.execute(
+                            f'UPDATE chats SET deleted = False WHERE id_chat = {id_chat} AND id_user = {i.id}')
+
                     connect.commit()
 
+            return
+
+        elif message.content_type == 'left_chat_member':
+            i = message.left_chat_member
+            if i.is_bot:
+                if i.username == THIS_IS_BOT_NAME:
+                    cursor.execute(f'UPDATE settings SET enable_group = False WHERE id_chat = {id_chat}')
             else:
-                i_last_name = i.last_name
-                if i_last_name is None:
-                    i_last_name = ''
+                cursor.execute(f'UPDATE chats SET deleted = True, date_of_the_last_message = "{date_of_the_last_message}" '
+                               f'WHERE id_chat = {id_chat} AND id_user = {i.id}')
 
-                i_username = i.username
-                if i_username is None:
-                    i_username = ''
+            connect.commit()
 
-                cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {i.id}')
+            return
+
+        id_user = message.from_user.id
+        first_name = message.from_user.first_name
+        last_name = message.from_user.last_name
+        if last_name is None:
+            last_name = ''
+        username = message.from_user.username
+        if username is None:
+            username = ''
+        characters = 0
+
+        message_id = 0
+        if message.content_type == 'text':
+            if message.from_user.is_bot:
+                return
+            characters = len(message.text)
+            if message.text.find('@' + THIS_IS_BOT_NAME) > 0:
+                try:
+                    chat_admins = await bot.get_chat_administrators(id_chat)
+                    if its_admin(id_user, chat_admins):
+                        message_id = message.message_id
+                        cursor.execute(f'SELECT id_user, first_name, last_name, username FROM chats WHERE id_chat = {id_chat} AND deleted = 0')
+                        result = cursor.fetchall()
+                        text = 'Внимание\! Общий опрос\: \n'
+                        for i in result:
+                            i_id_user = i[0]
+                            i_first_name = i[1]
+                            i_last_name = i[2]
+                            i_username = i[3]
+                            name_user = shielding(i_first_name + ' ' + i_last_name).strip()
+                            user = f'[{name_user}](tg://user?id={i_id_user})'
+                            if not i_username == '':
+                                user += f' \(@{shielding(i_username)}\)'
+                            text += user + '\n'
+                        text += 'Чтобы ваш ответ был учтен, необходимо ответить на сообщение куратора, т\.е\. нажать на сообщение куратора и выбрать \"Ответить\"\.'
+                        text += '\n \#ВажноеСообщение'
+                        await message.reply(text, parse_mode='MarkdownV2', disable_notification=True)
+                        cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
+                        connect.commit()
+                except Exception:
+                    pass
+            if message.reply_to_message is not None:
+                autor_id_user = message.from_user.id
+                autor_message_id = message.reply_to_message.message_id
+                cursor.execute(f'SELECT * FROM messages WHERE id_chat = {id_chat} AND id_user = {autor_id_user} AND message_id = {autor_message_id}')
                 meaning = cursor.fetchone()
-                if meaning is None:
-                    cursor.execute(
-                        'INSERT INTO chats (id_chat, id_user, first_name, last_name, username, '
-                        'messages, characters, deleted, date_of_the_last_message) '
-                        f'VALUES ({id_chat}, {i.id}, "{i.first_name}", "{i_last_name}", '
-                        f'"{i_username}", 0, 0, False, "{date_of_the_last_message}")')
-                else:
-                    cursor.execute(
-                        f'UPDATE chats SET deleted = False WHERE id_chat = {id_chat} AND id_user = {i.id}')
+                if meaning is not None:
+                    message_id = autor_message_id
+        elif message.content_type == 'photo' and message.caption is not None:
+            characters = len(message.caption)
+        elif message.content_type == 'poll':
+            characters = len(message.poll.question)
+            for i in message.poll.options:
+                characters += len(i.text)
 
-                connect.commit()
-
-        return
-
-    elif message.content_type == 'left_chat_member':
-        i = message.left_chat_member
-        if i.is_bot:
-            if i.username == THIS_IS_BOT_NAME:
-                cursor.execute(f'UPDATE settings SET enable_group = False WHERE id_chat = {id_chat}')
-        else:
-            cursor.execute(f'UPDATE chats SET deleted = True, date_of_the_last_message = "{date_of_the_last_message}" '
-                           f'WHERE id_chat = {id_chat} AND id_user = {i.id}')
-
-        connect.commit()
-
-        return
-
-    id_user = message.from_user.id
-    first_name = message.from_user.first_name
-    last_name = message.from_user.last_name
-    if last_name is None:
-        last_name = ''
-    username = message.from_user.username
-    if username is None:
-        username = ''
-    characters = 0
-
-    message_id = 0
-    if message.content_type == 'text':
         if message.from_user.is_bot:
             return
-        characters = len(message.text)
-        if message.text.find('@' + THIS_IS_BOT_NAME) > 0:
-            try:
-                chat_admins = await bot.get_chat_administrators(id_chat)
-                if its_admin(id_user, chat_admins):
-                    message_id = message.message_id
-                    cursor.execute(f'SELECT id_user, first_name, last_name, username FROM chats WHERE id_chat = {id_chat} AND deleted = 0')
-                    result = cursor.fetchall()
-                    text = 'Внимание\! Общий опрос\: \n'
-                    for i in result:
-                        i_id_user = i[0]
-                        i_first_name = i[1]
-                        i_last_name = i[2]
-                        i_username = i[3]
-                        name_user = shielding(i_first_name + ' ' + i_last_name).strip()
-                        user = f'[{name_user}](tg://user?id={i_id_user})'
-                        if not i_username == '':
-                            user += f' \(@{shielding(i_username)}\)'
-                        text += user + '\n'
-                    text += 'Чтобы ваш ответ был учтен, необходимо ответить на сообщение куратора, т\.е\. нажать на сообщение куратора и выбрать \"Ответить\"\.'
-                    text += '\n \#ВажноеСообщение'
-                    await message.reply(text, parse_mode='MarkdownV2', disable_notification=True)
-                    cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
-                    connect.commit()
-            except Exception:
-                pass
-        if message.reply_to_message is not None:
-            autor_id_user = message.from_user.id
-            autor_message_id = message.reply_to_message.message_id
-            cursor.execute(f'SELECT * FROM messages WHERE id_chat = {id_chat} AND id_user = {autor_id_user} AND message_id = {autor_message_id}')
-            meaning = cursor.fetchone()
-            if meaning is not None:
-                message_id = autor_message_id
-    elif message.content_type == 'photo' and message.caption is not None:
-        characters = len(message.caption)
-    elif message.content_type == 'poll':
-        characters = len(message.poll.question)
-        for i in message.poll.options:
-            characters += len(i.text)
 
-    if message.from_user.is_bot:
-        return
+        cursor.execute('INSERT INTO messages (id_chat, id_user, date, characters, message_id) '
+                       f'VALUES ({id_chat}, {id_user}, "{date_of_the_last_message}", {characters}, {message_id})')
+        connect.commit()
 
-    cursor.execute('INSERT INTO messages (id_chat, id_user, date, characters, message_id) '
-                   f'VALUES ({id_chat}, {id_user}, "{date_of_the_last_message}", {characters}, {message_id})')
-    connect.commit()
+        cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {id_user}')
+        meaning = cursor.fetchone()
 
-    cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {id_user}')
-    meaning = cursor.fetchone()
+        if meaning is None:
+            cursor.execute(
+                f'INSERT INTO chats (id_chat, id_user, first_name, last_name, '
+                f'username, messages, characters, deleted, date_of_the_last_message) '
+                f'VALUES ({id_chat}, {id_user}, "{first_name}", "{last_name}", '
+                f'"{username}", 1, {characters}, False, "{date_of_the_last_message}")')
+        else:
+            cursor.execute('UPDATE chats SET '
+                           'messages = messages + 1, '
+                           f'characters = characters + {characters}, '
+                           f'first_name = "{first_name}", '
+                           f'last_name = "{last_name}", '
+                           f'username = "{username}", '
+                           f'deleted = False, '
+                           f'date_of_the_last_message = "{date_of_the_last_message}" '
+                           f'WHERE id_chat = {id_chat} AND id_user = {id_user}')
+        connect.commit()
 
-    if meaning is None:
-        cursor.execute(
-            f'INSERT INTO chats (id_chat, id_user, first_name, last_name, '
-            f'username, messages, characters, deleted, date_of_the_last_message) '
-            f'VALUES ({id_chat}, {id_user}, "{first_name}", "{last_name}", '
-            f'"{username}", 1, {characters}, False, "{date_of_the_last_message}")')
-    else:
-        cursor.execute('UPDATE chats SET '
-                       'messages = messages + 1, '
-                       f'characters = characters + {characters}, '
-                       f'first_name = "{first_name}", '
-                       f'last_name = "{last_name}", '
-                       f'username = "{username}", '
-                       f'deleted = False, '
-                       f'date_of_the_last_message = "{date_of_the_last_message}" '
-                       f'WHERE id_chat = {id_chat} AND id_user = {id_user}')
-    connect.commit()
+
+@dp.chat_join_request_handler()
+async def join(update: ChatJoinRequest):
+    await update.approve()
+
+
+@dp.chat_member_handler()
+async def join(update: ChatJoinRequest):
+    await update.approve()
+
+
+@dp.chat_join_request_handler()
+async def join(update: ChatJoinRequest):
+    await update.approve()
 
 
 executor.start_polling(dp, skip_updates=False, on_startup=on_startup)
