@@ -3,8 +3,11 @@ from aiogram.dispatcher import Dispatcher
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils import executor
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ChatJoinRequest
-from settings import TOKEN, SUPER_ADMIN_ID, THIS_IS_BOT_NAME
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
+    KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatJoinRequest
+from settings import TOKEN, SUPER_ADMIN_ID, THIS_IS_BOT_NAME, CHANNEL_ID, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME
+from geopy.geocoders import Yandex
+import requests
 import sqlite3
 from datetime import datetime
 import asyncio
@@ -30,15 +33,22 @@ async def on_startup(_):
         include_admins_in_statistics BLOB, sort_by_messages BLOB, do_not_output_the_number_of_messages BLOB, 
         do_not_output_the_number_of_characters BLOB, period_of_activity INTEGER, report_enabled BLOB, 
         report_every_week BLOB, report_time TEXT, enable_group BLOB, last_notify_date TEXT, 
-        channel TEXT, channel_discussion_group_id TEXT)''')
+        channel INTEGER, free TEXT)''')
     connect.execute(
         '''CREATE TABLE IF NOT EXISTS meetings(id_chat INTEGER, id_user INTEGER, day TEXT,
         _00 BLOB, _01 BLOB, _02 BLOB, _03 BLOB, _04 BLOB, _05 BLOB, _06 BLOB, _07 BLOB, _08 BLOB, _09 BLOB, 
         _10 BLOB, _11 BLOB, _12 BLOB, _13 BLOB, _14 BLOB, _15 BLOB, _16 BLOB, _17 BLOB, _18 BLOB, _19 BLOB, 
         _20 BLOB, _21 BLOB, _22 BLOB, _23 BLOB)''')
+    connect.execute(
+        '''CREATE TABLE IF NOT EXISTS users(id_user INTEGER, first_name TEXT, last_name TEXT,
+        username TEXT, language_code BLOB, registration_date TEXT, registration_field TEXT, message_id INTEGER, 
+        gender TEXT, FIO TEXT, address TEXT, tel TEXT, mail TEXT, projects TEXT)''')
+
     connect.commit()
 
     asyncio.create_task(scheduler())
+
+    print('Ok')
 
 
 async def scheduler():
@@ -195,6 +205,7 @@ async def get_stat(id_chat, id_user=None):
 
 async def get_start_menu(id_user):
     this_is_super_admin = id_user == SUPER_ADMIN_ID
+    # this_is_super_admin = False
     if this_is_super_admin:
         piece = ''
     else:
@@ -209,6 +220,7 @@ async def get_start_menu(id_user):
             get = True
         else:
             try:
+                # get_chat_administrators - problems
                 member = await bot.get_chat_member(i[0], id_user)
                 get = member.is_chat_admin()
             except Exception:
@@ -223,7 +235,18 @@ async def get_start_menu(id_user):
     one_group = None
 
     if len(user_groups) == 0:
-        text = 'Для начала работы, необходимо добавить бота в группу, где вы являетесь администратором\.'
+        if len(meaning) == 0:
+            text = 'Это бот для участников проектов https://ipdt.kz/proekty/. Присоединяйтесь!'
+            text = shielding(text)
+            inline_kb = InlineKeyboardMarkup(row_width=1)
+            inline_kb.add(InlineKeyboardButton(text='Перейти на сайт.', url='https://ipdt.kz/proekty/'))
+        else:
+            text = 'Добрый день, дорогой друг! \n\n' \
+                   'Команда Института рада приветствовать Вас! \n\n' \
+                   'Для того, чтобы получить доступ к материалам, необходимо пройти небольшую регистрацию!'
+            text = shielding(text)
+            inline_kb = InlineKeyboardMarkup(row_width=1)
+            inline_kb.add(InlineKeyboardButton(text='Регистрация', callback_data='reg'))
     elif len(user_groups) == 1:
         one_group = user_groups[0][0]
     else:
@@ -255,7 +278,7 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
     inline_kb.add(InlineKeyboardButton(text='Не выводить количество символов: ' + convert_bool(meaning[6]), callback_data=f'settings {id_chat} do_not_output_the_number_of_characters {meaning[6]}'))
     inline_kb.add(InlineKeyboardButton(text='Статистика за период (дней): ' + str(meaning[7]), callback_data=f'settings {id_chat} period_of_activity {meaning[7]}'))
     inline_kb.add(InlineKeyboardButton(text='Автоматический отчет в чат: ' + convert_bool(meaning[8]), callback_data=f'settings {id_chat} report_enabled {meaning[8]}'))
-    inline_kb.add(InlineKeyboardButton(text='Ссылка на канал: ' + meaning[14], callback_data=f'settings {id_chat} channel {meaning[14]}'))
+    # inline_kb.add(InlineKeyboardButton(text='Ссылка на канал: ' + meaning[14], callback_data=f'settings {id_chat} channel {meaning[14]}'))
 
     if back_button:
         inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
@@ -397,21 +420,25 @@ async def run_reminder():
         id_chat = i[0]
         text = i[1]
         text = 'Сегодня не откликнулись на запрос\: \n' + text + '\n \#ВажноеСообщение'
-        await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
+        try:
+            await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
+        except Exception:
+            pass
         cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
         connect.commit()
 
 
 @dp.message_handler(commands=['start'])
 async def command_start(message: Message):
-    id_user = message.from_user.id
-    text, inline_kb, one_group = await get_start_menu(id_user)
+    if message.chat.type == 'private':
+        id_user = message.from_user.id
+        text, inline_kb, one_group = await get_start_menu(id_user)
 
-    if one_group is None:
-        await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
-    else:
-        text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
-        await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+        if one_group is None:
+            await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, protect_content=True)
+        else:
+            text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
+            await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, protect_content=True)
 
 
 @dp.message_handler(commands=['get_stat'])
@@ -597,13 +624,13 @@ async def process_parameter(callback: CallbackQuery):
             parameter_value_int = 1
         parameter_value_int += adding
         await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value_int)
-    if parameter_name == 'channel':
-        cursor.execute(f'UPDATE chats SET state = "channel", message_id = {callback.message.message_id} WHERE id_user = {id_user} AND id_chat = {id_chat}')
-        connect.commit()
-        inline_kb = InlineKeyboardMarkup(row_width=1)
-        inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
-        text = shielding('Пришлите пригласительную ссылку на канал, где вы будете публиковать закрытые учебные материалы в виде https://t.me/+SAqGflBSoqpYv2W4')
-        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    # if parameter_name == 'channel':
+    #     cursor.execute(f'UPDATE chats SET state = "channel", message_id = {callback.message.message_id} WHERE id_user = {id_user} AND id_chat = {id_chat}')
+    #     connect.commit()
+    #     inline_kb = InlineKeyboardMarkup(row_width=1)
+    #     inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
+    #     text = shielding('Пришлите пригласительную ссылку на канал, где вы будете публиковать закрытые учебные материалы в виде https://t.me/+SAqGflBSoqpYv2W4')
+    #     await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
     else:
         if parameter_value == '0':
             parameter_value = '1'
@@ -612,25 +639,294 @@ async def process_parameter(callback: CallbackQuery):
         await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value)
 
 
+def all_projects():
+    # return ['Родительский университет', 'Разумная мама', 'Школа семьи Profamily', 'Чандралока', 'Не обучался']
+    return ['Родительский университет', 'Разумная мама', 'Школа семьи Profamily', 'Чандралока']
+
+
+async def get_projects_cb(id_user, projects):
+    # if projects is None:
+    #     cursor.execute(f'SELECT projects FROM users WHERE id_user = {id_user}')
+    #     projects = cursor.fetchone()[0]
+
+    projects_tuple = all_projects()
+
+    inline_kb = InlineKeyboardMarkup(row_width=1)
+    for i in projects_tuple:
+        project = i
+        ok = ''
+        if project in projects:
+            ok = '✅ '
+        inline_kb.add(InlineKeyboardButton(text=ok + project, callback_data='projects ' + project))
+
+    inline_kb.add(InlineKeyboardButton(text='Готово', callback_data='projects Готово'))
+
+    return inline_kb
+
+
+async def registration_process(message: Message, meaning=''):
+    id_user = message.chat.id
+
+    cursor.execute(f'SELECT registration_field, message_id FROM users WHERE id_user = {id_user}')
+    result_tuple = cursor.fetchone()
+
+    # if result_tuple is None or result_tuple[0] == '':
+    if result_tuple is None:
+        return
+
+    registration_field = result_tuple[0]
+    message_id = result_tuple[1]
+
+    new_registration_field = ''
+    text = ''
+    inline_kb = InlineKeyboardMarkup(row_width=1)
+    delete_my_message = True
+
+    if registration_field == '':
+        new_registration_field = 'gender'
+        text = 'Шаг 1 из 7. \nВаш пол:'
+        inline_kb.add(InlineKeyboardButton(text='Мужской', callback_data='gender Мужской'))
+        inline_kb.add(InlineKeyboardButton(text='Женский', callback_data='gender Женский'))
+
+    elif registration_field == 'gender':
+        new_registration_field = 'FIO'
+        text = 'Шаг 2 из 7. \nВведите ваши имя и фамилию:'
+
+    elif registration_field == 'FIO':
+        new_registration_field = 'address'
+        text = 'Шаг 3 из 7. \nВведите ваши страну и город:'
+
+    elif registration_field == 'address':
+        new_registration_field = 'tel'
+        text = 'Шаг 4 из 7. \nВведите ваш номер телефона:'
+
+    elif registration_field == 'tel':
+        new_registration_field = 'mail'
+        text = 'Шаг 5 из 7. \nВведите адрес вашей электронной почты:'
+
+    elif registration_field == 'mail':
+        new_registration_field = 'projects'
+        inline_kb = await get_projects_cb(id_user, '')
+        text = 'Шаг 6 из 7. \nЕсли вы обучались ранее в наших проектах, пожалуйста, отметьте их:'
+
+    elif registration_field == 'projects':
+
+        if not meaning == 'Готово':
+            delete_my_message = False
+            new_registration_field = ''
+            cursor.execute(f'SELECT projects FROM users WHERE id_user = {id_user}')
+            projects = cursor.fetchone()[0]
+            if meaning in projects:
+                projects = projects.replace(meaning + ';', '')
+            else:
+                projects += meaning + ';'
+            meaning = projects
+
+            inline_kb = await get_projects_cb(id_user, projects)
+            text = message.text #'Шаг 6 из 7. \nЕсли вы обучались ранее в наших проектах, пожалуйста, отметьте их:'
+            text = shielding(text)
+
+            await message.edit_text(text, reply_markup=inline_kb, parse_mode='MarkdownV2')
+
+        else:
+            new_registration_field = 'done'
+            registration_field = ''
+
+        # elif registration_field == 'done':
+            # inviteToChannel
+
+            # 1
+            invite_link = INVITE_LINK
+
+            # 2
+            # cursor.execute(f'SELECT first_name, last_name, username FROM users WHERE id_user = {id_user}')
+            # user = cursor.fetchone()
+            # name = f'{user[0]}, {user[1]}, {user[2]}, {id_user}'
+            # result = await bot.create_chat_invite_link(chat_id=CHANNEL_ID, name=name, member_limit=1)
+            # invite_link = result.invite_link
+
+            inline_kb = InlineKeyboardMarkup(row_width=1)
+            inline_kb.add(InlineKeyboardButton('В канал с материалами (заявка)', url=invite_link))
+
+            text = 'Шаг 7 из 7. \nПо кнопке ниже будет подана заявка на вступление в канал, где будут выкладываться учебные материалы. Заявка будет принята автоматически.'
+
+    if not text == '':
+        text = shielding(text)
+
+    if delete_my_message:
+        if message_id is not None and not message_id == '' and not message_id == message.message_id:
+            try:
+                await bot.delete_message(chat_id=id_user, message_id=message_id)
+            except Exception:
+                pass
+        await message.delete()
+
+        message = await bot.send_message(text=text, chat_id=id_user, reply_markup=inline_kb, parse_mode='MarkdownV2')
+
+    query_text = ''
+
+    if not registration_field == '':
+        query_text = f'{registration_field} = "{meaning}"'
+
+    if not new_registration_field == '':
+        if not query_text == '':
+            query_text += ', '
+
+        query_text += f'''registration_field = '{new_registration_field}' '''
+
+    if not query_text == '':
+        query_text += ', '
+
+    query_text += f'message_id = {message.message_id}'
+    query_text = 'UPDATE users SET ' + query_text + f' WHERE id_user = {id_user}'
+    cursor.execute(query_text)
+    connect.commit()
+
+
+@dp.callback_query_handler(text='reg')
+async def menu_settings_help(callback: CallbackQuery):
+    id_user = callback.from_user.id
+    first_name = callback.from_user.first_name
+    last_name = callback.from_user.last_name
+    if last_name is None:
+        last_name = ''
+    username = callback.from_user.username
+    if username is None:
+        username = ''
+    language_code = callback.from_user.language_code
+
+    cursor.execute(f'SELECT id_user FROM users WHERE id_user = {id_user}')
+    result = cursor.fetchone()
+
+    if result is None:
+        cursor.execute(
+            f'''INSERT INTO users (id_user, first_name, last_name, username, language_code, 
+                    registration_date, registration_field, FIO, address, tel, mail, projects) 
+                    VALUES ({id_user}, "{first_name}", "{last_name}", "{username}", "{language_code}", 
+                    datetime("now"), "", "", "", "", "", "")''')
+    else:
+        cursor.execute(
+            f'''UPDATE users SET first_name = "{first_name}", last_name = "{last_name}", 
+                username = "{username}", language_code = "{language_code}", registration_field = "", projects = "" 
+                WHERE id_user = {id_user}''')
+    connect.commit()
+
+    await registration_process(callback.message)
+
+
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('gender ') or x.data.startswith('projects '))
+async def gender_processing(callback: CallbackQuery):
+    await callback.answer()
+
+    value = callback.data
+    value = value.replace('gender ', '')
+    value = value.replace('projects ', '')
+
+    await registration_process(callback.message, value)
+
+
+@dp.message_handler(content_types=['contact'])
+async def handle_location(message: Message):
+    id_user = message.from_user.id
+    tel = message.contact.phone_number
+    cursor.execute(f'''UPDATE users SET tel = "{tel}" WHERE id_user = {id_user}''')
+    connect.commit()
+
+    await message.answer('ok', parse_mode='MarkdownV2', reply_markup=ReplyKeyboardRemove(), disable_web_page_preview=True)
+
+    text = 'Выберете, в каких проектах вы уже обучались:'
+    text = shielding(text)
+    inline_kb = await get_projects_cb(id_user, '')
+
+    await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, disable_web_page_preview=True)
+
+
+@dp.message_handler(content_types=['location'])
+async def handle_location(message: Message):
+    id_user = message.from_user.id
+    latitude = message.location.latitude
+    longitude = message.location.longitude
+    language_code = message.from_user.language_code
+
+    cursor.execute(f'UPDATE users SET latitude = "{latitude}", longitude = "{longitude}" WHERE id_user = {id_user}')
+    connect.commit()
+
+    # geolocator = Nominatim(user_agent="vaishnava_reminder_bot")
+    geolocator = Yandex(api_key=YANDEX_API_KEY)
+    location = geolocator.reverse(f'{latitude}, {longitude}')
+
+    address_path = location.raw['metaDataProperty']['GeocoderMetaData']['Address']
+    address = address_path['formatted']
+    country = ''
+    area = ''
+    city = ''
+    components = address_path['Components']
+    for i in components:
+        if i['kind'] == 'country':
+            country = i['name']
+        elif i['kind'] == 'province':
+            area = i['name']
+        elif i['kind'] == 'area':
+            area = i['name']
+        elif i['kind'] == 'locality' and city == '':
+            city = i['name']
+
+    cursor.execute(f'UPDATE users SET address = "{address}", country = "{country}", area = "{area}", city = "{city}" WHERE id_user = {id_user}')
+    connect.commit()
+
+    if area in ("Севастополь", "Республика Крым"):
+        uts = 3
+        uts_summer = 3
+    else:
+        response_text = requests.get(f'http://api.geonames.org/timezoneJSON?formatted=true&lat={latitude}&lng={longitude}&username={GEONAMES_USERNAME}')  ## Make a request
+        response = response_text.json()
+        uts = response['rawOffset']
+        uts_summer = response['dstOffset']
+
+    cursor.execute(f'UPDATE users SET uts = "{uts}", uts_summer = "{uts_summer}" WHERE id_user = {id_user}')
+    connect.commit()
+
+    # TODO сделать определение текущего UTC
+    uts_text = str(uts)
+    if uts == 0:
+        pass
+    elif uts > 0:
+        uts_text = '\+ ' + uts_text
+    elif uts < 0:
+        uts_text = '\- ' + uts_text
+    uts_text += ' UTC'
+
+    text = 'Теперь неодходимо отправить номер телефона.'
+    text = shielding(text)
+    keyboard = ReplyKeyboardMarkup()
+    keyboard.add(KeyboardButton('Отправьте ваш номер телефона.', request_contact=True))
+
+    await message.answer(text, parse_mode='MarkdownV2', reply_markup=keyboard, disable_web_page_preview=True)
+
+
 @dp.message_handler(content_types='any')
 async def message_handler(message):
     if message.chat.type == 'private':
-        id_user = message.from_user.id
-        cursor.execute(f'SELECT id_chat, message_id FROM chats WHERE id_user = {id_user} AND state = "channel"')
-        result = cursor.fetchone()
-        if result is None:
+        if not message.content_type == 'text':
             return
-        id_chat = result[0]
-        message_id = result[1]
+        # id_user = message.from_user.id
+        # cursor.execute(f'SELECT id_chat, message_id FROM chats WHERE id_user = {id_user} AND state = "channel"')
+        # result = cursor.fetchone()
+        # if result is None:
+        #     return
+        # id_chat = result[0]
+        # message_id = result[1]
+        #
+        # cursor.execute(f'UPDATE settings SET channel = "{message.text}" WHERE id_chat = {id_chat}')
+        # cursor.execute(f'UPDATE chats SET state = "", message_id = 0 WHERE id_user = {id_user} AND id_chat = {id_chat}')
+        # connect.commit()
+        #
+        # await message.delete()
+        #
+        # text, inline_kb = await setting_up_a_chat(id_chat, id_user)
+        # await bot.edit_message_text(text=text, chat_id=id_user, message_id=message_id, reply_markup=inline_kb, parse_mode='MarkdownV2')
 
-        cursor.execute(f'UPDATE settings SET channel = "{message.text}" WHERE id_chat = {id_chat}')
-        cursor.execute(f'UPDATE chats SET state = "", message_id = 0 WHERE id_user = {id_user} AND id_chat = {id_chat}')
-        connect.commit()
-
-        await message.delete()
-
-        text, inline_kb = await setting_up_a_chat(id_chat, id_user)
-        await bot.edit_message_text(text=text, chat_id=id_user, message_id=message_id, reply_markup=inline_kb, parse_mode='MarkdownV2')
+        await registration_process(message, message.text)
 
     else:
         id_chat = message.chat.id
@@ -818,17 +1114,41 @@ async def message_handler(message):
 
 @dp.chat_join_request_handler()
 async def join(update: ChatJoinRequest):
-    await update.approve()
+    id_user = update.from_user.id
+    cursor.execute(
+        f'''SELECT DISTINCT users.message_id FROM chats
+            INNER JOIN settings ON chats.id_chat = settings.id_chat
+            INNER JOIN users ON chats.id_user = users.id_user	
+            WHERE settings.enable_group AND chats.id_user = {id_user}''')
+    meaning = cursor.fetchone()
+
+    inline_kb = InlineKeyboardMarkup(row_width=1)
+
+    if meaning is None:
+        await update.decline()
+        text = 'Заявка на вступление отклонена. Свяжитесь с вашим куратором для решения этой ситуации.'
+    else:
+        await update.approve()
+        text = '''Все получилось! \nПоздравляем Вас с успешной регистрацией! \nВаша заявка подтверждена на вступление подтверждена, пожалуйста заходите.'''
+        inline_kb.add(InlineKeyboardButton('Зайти в канал.', url=INVITE_LINK))
+
+    text = shielding(text)
+    await bot.edit_message_text(text=text, chat_id=id_user, message_id=meaning[0], reply_markup=inline_kb, parse_mode='MarkdownV2')
+
+
+@dp.channel_post_handler()
+async def join(message: Message):
+    qwe=1
 
 
 @dp.chat_member_handler()
-async def join(update: ChatJoinRequest):
-    await update.approve()
+async def join(update):
+    qwe=1
 
 
-@dp.chat_join_request_handler()
-async def join(update: ChatJoinRequest):
-    await update.approve()
+@dp.chat_member_handler()
+async def join(update):
+    qwe=1
 
 
 executor.start_polling(dp, skip_updates=False, on_startup=on_startup)
