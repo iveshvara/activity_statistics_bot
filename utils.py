@@ -12,27 +12,73 @@ import aioschedule
 
 async def on_startup(_):
     connect.execute(
-        '''CREATE TABLE IF NOT EXISTS chats(id_chat INTEGER, id_user INTEGER, first_name TEXT, last_name TEXT, 
-        username TEXT, characters INTEGER, messages INTEGER, date_of_the_last_message TEXT, deleted BLOB, 
-        state TEXT, message_id TEXT)''')
-    connect.execute(
-        '''CREATE TABLE IF NOT EXISTS messages(id_chat INTEGER, id_user INTEGER, date TEXT, characters INTEGER, 
-        message_id INTEGER)''')
-    connect.execute(
-        '''CREATE TABLE IF NOT EXISTS settings(id_chat INTEGER, title TEXT, statistics_for_everyone BLOB, 
-        include_admins_in_statistics BLOB, sort_by_messages BLOB, do_not_output_the_number_of_messages BLOB, 
-        do_not_output_the_number_of_characters BLOB, period_of_activity INTEGER, report_enabled BLOB, 
-        report_every_week BLOB, report_time TEXT, enable_group BLOB, last_notify_date TEXT, 
-        channel INTEGER, free TEXT)''')
+        '''CREATE TABLE IF NOT EXISTS chats(
+            id_chat INTEGER, 
+            id_user INTEGER, 
+            first_name TEXT, 
+            last_name TEXT, 
+            username TEXT, 
+            characters INTEGER, 
+            messages INTEGER,
+            deleted BLOB, 
+            date_of_the_last_message TEXT,  
+            state TEXT, 
+            message_id INTEGER
+    )''')
+
     connect.execute(
         '''CREATE TABLE IF NOT EXISTS meetings(id_chat INTEGER, id_user INTEGER, day TEXT,
         _00 BLOB, _01 BLOB, _02 BLOB, _03 BLOB, _04 BLOB, _05 BLOB, _06 BLOB, _07 BLOB, _08 BLOB, _09 BLOB, 
         _10 BLOB, _11 BLOB, _12 BLOB, _13 BLOB, _14 BLOB, _15 BLOB, _16 BLOB, _17 BLOB, _18 BLOB, _19 BLOB, 
         _20 BLOB, _21 BLOB, _22 BLOB, _23 BLOB)''')
+
     connect.execute(
-        '''CREATE TABLE IF NOT EXISTS users(id_user INTEGER, first_name TEXT, last_name TEXT,
-        username TEXT, language_code BLOB, registration_date TEXT, registration_field TEXT, message_id INTEGER, 
-        gender TEXT, FIO TEXT, address TEXT, tel TEXT, mail TEXT, projects TEXT)''')
+        '''CREATE TABLE IF NOT EXISTS messages(
+            id_chat INTEGER, 
+            id_user INTEGER, 
+            date TEXT, 
+            characters INTEGER, 
+            message_id INTEGER
+    )''')
+
+    connect.execute(
+        '''CREATE TABLE IF NOT EXISTS settings(
+            id_chat INTEGER, 
+            title TEXT, 
+            statistics_for_everyone BLOB, 
+            include_admins_in_statistics BLOB, 
+            sort_by_messages BLOB, 
+            do_not_output_the_number_of_messages BLOB, 
+            do_not_output_the_number_of_characters BLOB, 
+            period_of_activity INTEGER, 
+            report_enabled BLOB, 
+            report_every_week BLOB, 
+            report_time TEXT, 
+            enable_group BLOB, 
+            last_notify_date TEXT, 
+            last_notify_message_id_date INTEGER, 
+            channel INTEGER, 
+            check_channel_subscription BLOB
+    )''')
+
+    connect.execute(
+        '''CREATE TABLE IF NOT EXISTS users(
+            id_user INTEGER, 
+            first_name TEXT, 
+            last_name TEXT,
+            username TEXT, 
+            language_code BLOB, 
+            registration_date TEXT, 
+            registration_field TEXT, 
+            message_id INTEGER, 
+            gender TEXT, 
+            FIO TEXT, 
+            birthdate TEXT, 
+            address TEXT, 
+            tel TEXT, 
+            mail TEXT, 
+            projects TEXT
+    )''')
 
     connect.commit()
 
@@ -335,6 +381,7 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
     inline_kb.add(InlineKeyboardButton(text='Статистика за период (дней): ' + str(meaning[7]), callback_data=f'settings {id_chat} period_of_activity {meaning[7]}'))
     inline_kb.add(InlineKeyboardButton(text='Автоматический отчет в чат: ' + convert_bool(meaning[8]), callback_data=f'settings {id_chat} report_enabled {meaning[8]}'))
     # inline_kb.add(InlineKeyboardButton(text='Ссылка на канал: ' + meaning[14], callback_data=f'settings {id_chat} channel {meaning[14]}'))
+    inline_kb.add(InlineKeyboardButton(text='Проверять подписку на канал: ' + convert_bool(meaning[15]), callback_data=f'settings {id_chat} check_channel_subscription {meaning[15]}'))
 
     if back_button:
         inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
@@ -365,30 +412,58 @@ async def registration_process(message: Message, meaning=''):
 
     if registration_field == '':
         new_registration_field = 'gender'
-        text = 'Шаг 1 из 7. \nВаш пол:'
+        text = 'Шаг 1 из 8. \nВаш пол:'
         inline_kb.add(InlineKeyboardButton(text='Мужской', callback_data='gender Мужской'))
         inline_kb.add(InlineKeyboardButton(text='Женский', callback_data='gender Женский'))
 
     elif registration_field == 'gender':
         new_registration_field = 'FIO'
-        text = 'Шаг 2 из 7. \nВведите ваши имя и фамилию:'
+        text = 'Шаг 2 из 8. \nВведите ваши имя и фамилию:'
 
     elif registration_field == 'FIO':
+        new_registration_field = 'birthdate'
+        text = 'Шаг 3 из 8. \nДата вашего рождения в формате ДД.ММ.ГГГГ или ДДММГГГГ:'
+
+    elif registration_field == 'birthdate':
+        fail = False
+
+        format_date = ''
+        if len(meaning) == 10 and meaning.count('.') == 2:
+            format_date = '%d.%m.%Y'
+        elif len(meaning) == 8 and meaning.count('.') == 0:
+            format_date = '%d%m%Y'
+        else:
+            fail = True
+
+        if not fail:
+            try:
+                meaning = datetime.strptime(meaning, format_date)
+                fail = False
+            except Exception:
+                fail = True
+
+        if fail:
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            return
+
         new_registration_field = 'address'
-        text = 'Шаг 3 из 7. \nВведите ваши страну и город:'
+        text = 'Шаг 4 из 8. \nВведите ваши страну и город:'
 
     elif registration_field == 'address':
         new_registration_field = 'tel'
-        text = 'Шаг 4 из 7. \nВведите ваш номер телефона:'
+        text = 'Шаг 5 из 8. \nВведите ваш номер телефона:'
 
     elif registration_field == 'tel':
         new_registration_field = 'mail'
-        text = 'Шаг 5 из 7. \nВведите адрес вашей электронной почты:'
+        text = 'Шаг 6 из 8. \nВведите адрес вашей электронной почты:'
 
     elif registration_field == 'mail':
         new_registration_field = 'projects'
         inline_kb = await get_projects_cb(id_user, '')
-        text = 'Шаг 6 из 7. \nЕсли вы обучались ранее в наших проектах, пожалуйста, отметьте их:'
+        text = 'Шаг 7 из 8. \nЕсли вы обучались ранее в наших проектах, пожалуйста, отметьте их:'
 
     elif registration_field == 'projects':
 
@@ -404,7 +479,7 @@ async def registration_process(message: Message, meaning=''):
             meaning = projects
 
             inline_kb = await get_projects_cb(id_user, projects)
-            text = message.text #'Шаг 6 из 7. \nЕсли вы обучались ранее в наших проектах, пожалуйста, отметьте их:'
+            text = message.text
             text = shielding(text)
 
             await message.edit_text(text, reply_markup=inline_kb, parse_mode='MarkdownV2')
@@ -429,7 +504,7 @@ async def registration_process(message: Message, meaning=''):
             inline_kb = InlineKeyboardMarkup(row_width=1)
             inline_kb.add(InlineKeyboardButton('Заявка на вступление', url=invite_link))
 
-            text = 'Шаг 7 из 7. \nУчебные материалы будут выкладываться в канал. Подайте заявку на вступление (будет принята автоматически).'
+            text = 'Шаг 8 из 8. \nУчебные материалы будут выкладываться в канал. Подайте заявку на вступление (будет принята автоматически).'
 
     if not text == '':
         text = shielding(text)
@@ -440,7 +515,10 @@ async def registration_process(message: Message, meaning=''):
                 await bot.delete_message(chat_id=id_user, message_id=message_id)
             except Exception:
                 pass
-        await message.delete()
+        try:
+            await message.delete()
+        except Exception:
+            pass
 
         message = await bot.send_message(text=text, chat_id=id_user, reply_markup=inline_kb, parse_mode='MarkdownV2')
 

@@ -1,6 +1,6 @@
 
 from bot import bot, dp, cursor, connect
-from settings import THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME
+from settings import CHANNEL_ID, THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME
 from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, registration_process
 from service import add_buttons_time_selection, get_projects_cb, shielding, its_admin
 
@@ -89,9 +89,9 @@ async def message_handler(message):
                 f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
                 sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
                 period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
-                last_notify_date, last_notify_message_id_date) 
+                last_notify_date, last_notify_message_id_date, channel, check_channel_subscription) 
                 VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, False, "00:00", True, 
-                datetime("now"), datetime("now"))''')
+                datetime("now"), datetime("now"), 0, False)''')
             connect.commit()
 
             return
@@ -126,9 +126,9 @@ async def message_handler(message):
                                 f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
                                 sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
                                 period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
-                                last_notify_date, last_notify_message_id_date) 
+                                last_notify_date, last_notify_message_id_date, channel, check_channel_subscription) 
                                 VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, False, "00:00", True, 
-                                datetime("now"), datetime("now"))''')
+                                datetime("now"), datetime("now"), 0, False)''')
                         else:
                             cursor.execute(f'UPDATE settings SET enable_group = True, title = "{title}" WHERE id_chat = {id_chat}')
                         connect.commit()
@@ -163,11 +163,17 @@ async def message_handler(message):
             if i.is_bot:
                 if i.username == THIS_IS_BOT_NAME:
                     cursor.execute(f'UPDATE settings SET enable_group = False WHERE id_chat = {id_chat}')
+                    connect.commit()
             else:
-                cursor.execute(f'UPDATE chats SET deleted = True, date_of_the_last_message = "{date_of_the_last_message}" '
-                               f'WHERE id_chat = {id_chat} AND id_user = {i.id}')
+                id_user = i.id
+                cursor.execute(
+                    f'''UPDATE chats SET deleted = True, 
+                    date_of_the_last_message = "{date_of_the_last_message}" 
+                    WHERE id_chat = {id_chat} AND id_user = {id_user}''')
+                connect.commit()
 
-            connect.commit()
+                await bot.kick_chat_member(CHANNEL_ID, id_user)
+                await bot.unban_chat_member(CHANNEL_ID, id_user)
 
             return
 
@@ -254,6 +260,14 @@ async def message_handler(message):
         connect.commit()
 
 
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('id_chat '))
+async def choosing_a_chat_to_set_up(callback: CallbackQuery):
+    id_chat = int(callback.data.replace('id_chat ', ''))
+    id_user = callback.from_user.id
+    text, inline_kb = await setting_up_a_chat(id_chat, id_user)
+    await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+
+
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('settings '))
 async def process_parameter(callback: CallbackQuery):
     id_user = callback.from_user.id
@@ -307,14 +321,6 @@ async def menu_back(callback: CallbackQuery):
     else:
         text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
         await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
-
-
-@dp.callback_query_handler(lambda x: x.data and x.data.startswith('id_chat '))
-async def choosing_a_chat_to_set_up(callback: CallbackQuery):
-    id_chat = int(callback.data.replace('id_chat ', ''))
-    id_user = callback.from_user.id
-    text, inline_kb = await setting_up_a_chat(id_chat, id_user)
-    await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
 
 
 @dp.callback_query_handler(text='reg')
