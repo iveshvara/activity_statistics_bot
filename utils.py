@@ -1,7 +1,7 @@
 
 from bot import bot, cursor, connect
 from settings import SUPER_ADMIN_ID, INVITE_LINK
-from service import its_admin, shielding, get_name_tg, convert_bool, get_projects_cb
+from service import its_admin, shielding, get_name_tg, convert_bool
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -42,6 +42,14 @@ async def on_startup(_):
     )''')
 
     connect.execute(
+        '''CREATE TABLE IF NOT EXISTS projects(
+            id INTEGER,
+            name TEXT,
+            channel_id INTEGER,
+            show BLOB
+    )''')
+
+    connect.execute(
         '''CREATE TABLE IF NOT EXISTS settings(
             id_chat INTEGER, 
             title TEXT, 
@@ -52,7 +60,7 @@ async def on_startup(_):
             do_not_output_the_number_of_characters BLOB, 
             period_of_activity INTEGER, 
             report_enabled BLOB, 
-            report_every_week BLOB, 
+            project_id INTEGER, 
             report_time TEXT, 
             enable_group BLOB, 
             last_notify_date TEXT, 
@@ -100,7 +108,8 @@ async def run_reminder():
     for i in result_tuple:
         id_chat = i[0]
         text = await get_stat(id_chat)
-        if not text == '' and not text == 'Нет статистики для отображения.':
+        # if not text == '' and not text == 'Нет статистики для отображения\.':
+        if not text == '':
             await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
             cursor.execute(f'UPDATE settings SET last_notify_date = datetime("now") WHERE id_chat = {id_chat}')
             connect.commit()
@@ -315,7 +324,7 @@ async def get_stat(id_chat, id_user=None):
             text = 'Нет статистики для отображения\.'
 
     else:
-        text = 'Статистику могут показать только администраторы группы.'
+        text = 'Статистику могут показать только администраторы группы\.'
 
     return text
 
@@ -327,10 +336,11 @@ async def get_start_menu(id_user):
         piece = ''
     else:
         piece = f' AND id_user = {id_user}'
-    cursor.execute('SELECT DISTINCT chats.id_chat, settings.title FROM chats '
+    cursor.execute('SELECT DISTINCT chats.id_chat, settings.title, settings.project_id FROM chats '
                    'LEFT OUTER JOIN settings ON chats.id_chat = settings.id_chat WHERE settings.enable_group' + piece)
     meaning = cursor.fetchall()
     user_groups = []
+    channel_enabled = False
     for i in meaning:
         get = False
         if this_is_super_admin:
@@ -340,23 +350,27 @@ async def get_start_menu(id_user):
                 # get_chat_administrators - problems
                 member = await bot.get_chat_member(i[0], id_user)
                 get = member.is_chat_admin()
-            except Exception:
+            except ValueError:
                 pass
 
         if get:
             title_result = i[1].replace('\\', '')
             user_groups.append([i[0], title_result])
 
+        if not channel_enabled and i[2] > 0:
+            channel_enabled = True
+
     text = ''
     inline_kb = InlineKeyboardMarkup(row_width=1)
     one_group = None
 
     if len(user_groups) == 0:
-        if len(meaning) == 0:
+        if len(meaning) == 0 or not channel_enabled:
             text = 'Это бот для участников проектов https://ipdt.kz/proekty/. Присоединяйтесь!'
             text = shielding(text)
             inline_kb = InlineKeyboardMarkup(row_width=1)
             inline_kb.add(InlineKeyboardButton(text='Перейти на сайт.', url='https://ipdt.kz/proekty/'))
+
         else:
             text = 'Добрый день, дорогой друг! \n\n' \
                    'Команда Института рада приветствовать Вас! \n\n' \
@@ -364,8 +378,10 @@ async def get_start_menu(id_user):
             text = shielding(text)
             inline_kb = InlineKeyboardMarkup(row_width=1)
             inline_kb.add(InlineKeyboardButton(text='Регистрация', callback_data='reg'))
+
     elif len(user_groups) == 1:
         one_group = user_groups[0][0]
+
     else:
         text = 'Выберете группу для настройки:'
         for i in user_groups:
@@ -375,7 +391,24 @@ async def get_start_menu(id_user):
 
 
 async def setting_up_a_chat(id_chat, id_user, back_button=True):
-    cursor.execute(f'SELECT * FROM settings WHERE enable_group AND id_chat = {id_chat}')
+    cursor.execute(
+        f'''SELECT 
+            settings.statistics_for_everyone,
+            settings.include_admins_in_statistics,
+            settings.sort_by_messages,
+            settings.do_not_output_the_number_of_messages,
+            settings.do_not_output_the_number_of_characters,
+            settings.period_of_activity,
+            settings.report_enabled,
+            projects.name,
+            settings.check_channel_subscription,
+	        settings.title	
+        FROM settings 
+            LEFT OUTER JOIN projects 
+                ON settings.project_id = projects.id
+        WHERE 
+            enable_group 
+            AND id_chat = {id_chat}''')
     meaning = cursor.fetchone()
 
     if meaning is None:
@@ -383,27 +416,28 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
 
     inline_kb = InlineKeyboardMarkup(row_width=1)
     if meaning[2]:
-        inline_kb.add(InlineKeyboardButton(text='Статистика доступна всем', callback_data=f'settings {id_chat} statistics_for_everyone {meaning[2]}'))
+        inline_kb.add(InlineKeyboardButton(text='Статистика доступна всем', callback_data=f'settings {id_chat} statistics_for_everyone {meaning[0]}'))
     else:
-        inline_kb.add(InlineKeyboardButton(text='Статистика доступна только администраторам', callback_data=f'settings {id_chat} statistics_for_everyone {meaning[2]}'))
-    inline_kb.add(InlineKeyboardButton(text='Включать админов в статистику: ' + convert_bool(meaning[3]), callback_data=f'settings {id_chat} include_admins_in_statistics {meaning[3]}'))
+        inline_kb.add(InlineKeyboardButton(text='Статистика доступна только администраторам', callback_data=f'settings {id_chat} statistics_for_everyone {meaning[0]}'))
+    inline_kb.add(InlineKeyboardButton(text='Включать админов в статистику: ' + convert_bool(meaning[1]), callback_data=f'settings {id_chat} include_admins_in_statistics {meaning[1]}'))
     if meaning[4]:
-        inline_kb.add(InlineKeyboardButton(text='Сортировка по сообщениям', callback_data=f'settings {id_chat} sort_by_messages {meaning[4]}'))
+        inline_kb.add(InlineKeyboardButton(text='Сортировка по сообщениям', callback_data=f'settings {id_chat} sort_by_messages {meaning[2]}'))
     else:
-        inline_kb.add(InlineKeyboardButton(text='Сортировка по количеству символов', callback_data=f'settings {id_chat} sort_by_messages {meaning[4]}'))
-    inline_kb.add(InlineKeyboardButton(text='Не выводить количество сообщений: ' + convert_bool(meaning[5]), callback_data=f'settings {id_chat} do_not_output_the_number_of_messages {meaning[5]}'))
-    inline_kb.add(InlineKeyboardButton(text='Не выводить количество символов: ' + convert_bool(meaning[6]), callback_data=f'settings {id_chat} do_not_output_the_number_of_characters {meaning[6]}'))
-    inline_kb.add(InlineKeyboardButton(text='Статистика за период (дней): ' + str(meaning[7]), callback_data=f'settings {id_chat} period_of_activity {meaning[7]}'))
-    inline_kb.add(InlineKeyboardButton(text='Автоматический отчет в чат: ' + convert_bool(meaning[8]), callback_data=f'settings {id_chat} report_enabled {meaning[8]}'))
+        inline_kb.add(InlineKeyboardButton(text='Сортировка по количеству символов', callback_data=f'settings {id_chat} sort_by_messages {meaning[2]}'))
+    inline_kb.add(InlineKeyboardButton(text='Не выводить количество сообщений: ' + convert_bool(meaning[3]), callback_data=f'settings {id_chat} do_not_output_the_number_of_messages {meaning[3]}'))
+    inline_kb.add(InlineKeyboardButton(text='Не выводить количество символов: ' + convert_bool(meaning[4]), callback_data=f'settings {id_chat} do_not_output_the_number_of_characters {meaning[4]}'))
+    inline_kb.add(InlineKeyboardButton(text='Статистика за период (дней): ' + str(meaning[5]), callback_data=f'settings {id_chat} period_of_activity {meaning[5]}'))
+    inline_kb.add(InlineKeyboardButton(text='Автоматический отчет в чат: ' + convert_bool(meaning[6]), callback_data=f'settings {id_chat} report_enabled {meaning[6]}'))
+    inline_kb.add(InlineKeyboardButton(text='Проект: ' + meaning[7], callback_data=f'settings {id_chat} project_name'))
+    inline_kb.add(InlineKeyboardButton(text='Проверять подписку на канал: ' + convert_bool(meaning[8]), callback_data=f'settings {id_chat} check_channel_subscription {meaning[8]}'))
     # inline_kb.add(InlineKeyboardButton(text='Ссылка на канал: ' + meaning[14], callback_data=f'settings {id_chat} channel {meaning[14]}'))
-    inline_kb.add(InlineKeyboardButton(text='Проверять подписку на канал: ' + convert_bool(meaning[15]), callback_data=f'settings {id_chat} check_channel_subscription {meaning[15]}'))
 
     if back_button:
         inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
 
     text = await get_stat(id_chat, id_user)
     #group_name = shielding(meaning[1])
-    group_name = meaning[1]
+    group_name = meaning[9]
     return '*Группа "' + group_name + '"\.*\n\n' + text, inline_kb
 
 
@@ -439,10 +473,10 @@ async def registration_command(callback_message):
     else:
         message = callback_message
 
-    await registration_process(message)
+    await registration_process(message, its_callback=False)
 
 
-async def registration_process(message: Message, meaning=''):
+async def registration_process(message: Message, meaning='', its_callback=False):
     id_user = message.chat.id
 
     cursor.execute(f'SELECT registration_field, message_id FROM users WHERE id_user = {id_user}')
@@ -462,17 +496,24 @@ async def registration_process(message: Message, meaning=''):
 
     if registration_field == '':
         new_registration_field = 'gender'
-        text = 'Шаг 1 из 8. \nВаш пол:'
+        text = 'Шаг 1 из 7. \nВаш пол:'
         inline_kb.add(InlineKeyboardButton(text='Мужской', callback_data='gender Мужской'))
         inline_kb.add(InlineKeyboardButton(text='Женский', callback_data='gender Женский'))
 
     elif registration_field == 'gender':
-        new_registration_field = 'FIO'
-        text = 'Шаг 2 из 8. \nВведите ваши имя и фамилию:'
+        if its_callback:
+            new_registration_field = 'FIO'
+            text = 'Шаг 2 из 7. \nВведите ваши имя и фамилию:'
+        else:
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            return
 
     elif registration_field == 'FIO':
         new_registration_field = 'birthdate'
-        text = 'Шаг 3 из 8. \nДата вашего рождения в формате ДД.ММ.ГГГГ или ДДММГГГГ:'
+        text = 'Шаг 3 из 7. \nДата вашего рождения в формате ДД.ММ.ГГГГ или ДДММГГГГ:'
 
     elif registration_field == 'birthdate':
         fail = False
@@ -500,61 +541,75 @@ async def registration_process(message: Message, meaning=''):
             return
 
         new_registration_field = 'address'
-        text = 'Шаг 4 из 8. \nВведите ваши страну и город:'
+        text = 'Шаг 4 из 7. \nВведите ваши страну и город:'
 
     elif registration_field == 'address':
         new_registration_field = 'tel'
-        text = 'Шаг 5 из 8. \nВведите ваш номер телефона:'
+        text = 'Шаг 5 из 7. \nВведите ваш номер телефона:'
 
     elif registration_field == 'tel':
         new_registration_field = 'mail'
-        text = 'Шаг 6 из 8. \nВведите адрес вашей электронной почты:'
+        text = 'Шаг 6 из 7. \nВведите адрес вашей электронной почты:'
 
     elif registration_field == 'mail':
-        new_registration_field = 'projects'
-        inline_kb = await get_projects_cb(id_user, '')
-        text = 'Шаг 7 из 8. \nЕсли вы обучались ранее в наших проектах, пожалуйста, отметьте их:'
+        # new_registration_field = 'projects'
+        # inline_kb = await get_projects_cb('', 'projects')
+        # text = 'Шаг 7 из 7. \nЕсли вы обучались ранее в наших проектах, пожалуйста, отметьте их:'
 
-    elif registration_field == 'projects':
+        new_registration_field = 'done'
+        registration_field = ''
 
-        if not meaning == 'Готово':
-            delete_my_message = False
-            new_registration_field = ''
-            cursor.execute(f'SELECT projects FROM users WHERE id_user = {id_user}')
-            projects = cursor.fetchone()[0]
-            if meaning in projects:
-                projects = projects.replace(meaning + ';', '')
-            else:
-                projects += meaning + ';'
-            meaning = projects
+        invite_link = INVITE_LINK
+        inline_kb = InlineKeyboardMarkup(row_width=1)
+        inline_kb.add(InlineKeyboardButton('Заявка на вступление', url=invite_link))
+        text = 'Шаг 7 из 7. \nУчебные материалы будут выкладываться в канал. Подайте заявку на вступление (будет принята автоматически).'
 
-            inline_kb = await get_projects_cb(id_user, projects)
-            text = message.text
-            text = shielding(text)
-
-            await message.edit_text(text, reply_markup=inline_kb, parse_mode='MarkdownV2')
-
-        else:
-            new_registration_field = 'done'
-            registration_field = ''
-
-        # elif registration_field == 'done':
-            # inviteToChannel
-
-            # 1
-            invite_link = INVITE_LINK
-
-            # 2
-            # cursor.execute(f'SELECT first_name, last_name, username FROM users WHERE id_user = {id_user}')
-            # user = cursor.fetchone()
-            # name = f'{user[0]}, {user[1]}, {user[2]}, {id_user}'
-            # result = await bot.create_chat_invite_link(chat_id=CHANNEL_ID, name=name, member_limit=1)
-            # invite_link = result.invite_link
-
-            inline_kb = InlineKeyboardMarkup(row_width=1)
-            inline_kb.add(InlineKeyboardButton('Заявка на вступление', url=invite_link))
-
-            text = 'Шаг 8 из 8. \nУчебные материалы будут выкладываться в канал. Подайте заявку на вступление (будет принята автоматически).'
+    # elif registration_field == 'projects':
+    #     if its_callback:
+    #         if not meaning == 'Готово':
+    #             delete_my_message = False
+    #             new_registration_field = ''
+    #             cursor.execute(f'SELECT projects FROM users WHERE id_user = {id_user}')
+    #             projects = cursor.fetchone()[0]
+    #             if meaning in projects:
+    #                 projects = projects.replace(meaning + ';', '')
+    #             else:
+    #                 projects += meaning + ';'
+    #             meaning = projects
+    # 
+    #             inline_kb = await get_projects_cb(projects, 'projects')
+    #             text = message.text
+    #             text = shielding(text)
+    # 
+    #             await message.edit_text(text, reply_markup=inline_kb, parse_mode='MarkdownV2')
+    # 
+    #         else:
+    #             new_registration_field = 'done'
+    #             registration_field = ''
+    # 
+    #         # elif registration_field == 'done':
+    #             # inviteToChannel
+    # 
+    #             # 1
+    #             invite_link = INVITE_LINK
+    # 
+    #             # 2
+    #             # cursor.execute(f'SELECT first_name, last_name, username FROM users WHERE id_user = {id_user}')
+    #             # user = cursor.fetchone()
+    #             # name = f'{user[0]}, {user[1]}, {user[2]}, {id_user}'
+    #             # result = await bot.create_chat_invite_link(chat_id=CHANNEL_ID, name=name, member_limit=1)
+    #             # invite_link = result.invite_link
+    # 
+    #             inline_kb = InlineKeyboardMarkup(row_width=1)
+    #             inline_kb.add(InlineKeyboardButton('Заявка на вступление', url=invite_link))
+    # 
+    #             text = 'Шаг 8 из 7. \nУчебные материалы будут выкладываться в канал. Подайте заявку на вступление (будет принята автоматически).'
+    #     else:
+    #         try:
+    #             await message.delete()
+    #         except Exception:
+    #             pass
+    #         return
 
     if not text == '':
         text = shielding(text)
@@ -596,10 +651,9 @@ async def process_parameter_input(callback: CallbackQuery, id_chat, parameter_na
     inline_kb = InlineKeyboardMarkup(row_width=1)
     inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
 
-    await callback.message.edit_text(
-        f'Текущее значение параметра {parameter_name} = "{parameter_value}". Введите новое значение:',
-        parse_mode='MarkdownV2',
-        reply_markup=inline_kb)
+    text = f'Текущее значение параметра {parameter_name} = "{parameter_value}". Введите новое значение:'
+    text = shielding(text)
+    await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
 
 
 async def process_parameter_continuation(callback: CallbackQuery, id_chat, id_user, parameter_name, parameter_value):

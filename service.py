@@ -76,13 +76,8 @@ def add_buttons_time_selection(shift):
     return inline_kb
 
 
-async def get_projects_cb(id_user, projects):
-    # if projects is None:
-    #     cursor.execute(f'SELECT projects FROM users WHERE id_user = {id_user}')
-    #     projects = cursor.fetchone()[0]
-
-    #projects_tuple = ['Родительский университет', 'Разумная мама', 'Школа семьи Profamily', 'Чандралока', 'Не обучался']
-    projects_tuple = ['Родительский университет', 'Разумная мама', 'Школа семьи Profamily', 'Чандралока']
+async def get_projects_cb(projects):
+    projects_tuple = []
 
     inline_kb = InlineKeyboardMarkup(row_width=1)
     for i in projects_tuple:

@@ -1,9 +1,9 @@
 
 from bot import bot, dp, cursor, connect
-from settings import CHANNEL_ID, THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME
+from settings import THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME
 from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
     registration_process, registration_command
-from service import add_buttons_time_selection, get_projects_cb, shielding, its_admin
+from service import add_buttons_time_selection, shielding, its_admin
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatJoinRequest
@@ -44,7 +44,11 @@ async def command_get_stat(message: Message):
         text = ''
 
     if not text == '':
-        await message.answer(text, parse_mode='MarkdownV2', disable_notification=True)
+        print(text)
+        try:
+            await message.answer(text, parse_mode='MarkdownV2', disable_notification=True)
+        except ValueError:
+            print(text)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('id_chat '))
@@ -90,6 +94,23 @@ async def process_parameter(callback: CallbackQuery):
     #     inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
     #     text = shielding('Пришлите пригласительную ссылку на канал, где вы будете публиковать закрытые учебные материалы в виде https://t.me/+SAqGflBSoqpYv2W4')
     #     await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    elif parameter_name == 'project_name':
+        text = shielding('Выберете ваш проект:')
+        cursor.execute(f'SELECT id, name FROM projects')
+        projects_tuple = cursor.fetchall()
+
+        inline_kb = InlineKeyboardMarkup(row_width=1)
+        for i in projects_tuple:
+            inline_kb.add(InlineKeyboardButton(text=i[1], callback_data='settings ' + str(id_chat) + ' project_id ' + str(i[0])))
+
+        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+
+    elif parameter_name == 'project_id':
+        cursor.execute(f'''UPDATE settings SET project_id = {parameter_value} WHERE id_chat = {id_chat}''')
+        connect.commit()
+        text, inline_kb = await setting_up_a_chat(id_chat, id_user)
+
+        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
     else:
         if parameter_value == '0':
             parameter_value = '1'
@@ -128,7 +149,7 @@ async def gender_processing(callback: CallbackQuery):
     value = value.replace('gender ', '')
     value = value.replace('projects ', '')
 
-    await registration_process(callback.message, value)
+    await registration_process(callback.message, value, True)
 
 
 @dp.chat_join_request_handler()
@@ -181,7 +202,7 @@ async def message_handler(message):
         # text, inline_kb = await setting_up_a_chat(id_chat, id_user)
         # await bot.edit_message_text(text=text, chat_id=id_user, message_id=message_id, reply_markup=inline_kb, parse_mode='MarkdownV2')
 
-        await registration_process(message, message.text)
+        await registration_process(message, message.text, False)
 
     else:
         id_chat = message.chat.id
@@ -201,9 +222,9 @@ async def message_handler(message):
             cursor.execute(
                 f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
                 sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
-                period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
+                period_of_activity, report_enabled, project_id, report_time, enable_group, 
                 last_notify_date, last_notify_message_id_date, channel, check_channel_subscription) 
-                VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, False, "00:00", True, 
+                VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, 0, "00:00", True, 
                 datetime("now"), datetime("now"), 0, False)''')
             connect.commit()
 
@@ -238,9 +259,9 @@ async def message_handler(message):
                             cursor.execute(
                                 f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
                                 sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
-                                period_of_activity, report_enabled, report_every_week, report_time, enable_group, 
+                                period_of_activity, report_enabled, project_id, report_time, enable_group, 
                                 last_notify_date, last_notify_message_id_date, channel, check_channel_subscription) 
-                                VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, False, "00:00", True, 
+                                VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, 0, "00:00", True, 
                                 datetime("now"), datetime("now"), 0, False)''')
                         else:
                             cursor.execute(f'UPDATE settings SET enable_group = True, title = "{title}" WHERE id_chat = {id_chat}')
@@ -285,8 +306,15 @@ async def message_handler(message):
                     WHERE id_chat = {id_chat} AND id_user = {id_user}''')
                 connect.commit()
 
-                await bot.kick_chat_member(CHANNEL_ID, id_user)
-                await bot.unban_chat_member(CHANNEL_ID, id_user)
+                cursor.execute(
+                    f'''SELECT projects.channel_id FROM settings 
+                    INNER JOIN projects ON settings.project_id = projects.id 
+                    AND settings.id_chat = {id_chat}''')
+                meaning = cursor.fetchone()
+                if meaning is not None:
+                    channel_id = meaning[0]
+                    await bot.kick_chat_member(channel_id, id_user)
+                    await bot.unban_chat_member(channel_id, id_user)
 
             return
 
@@ -465,7 +493,7 @@ async def handle_location(message: Message):
 
     text = 'Выберете, в каких проектах вы уже обучались:'
     text = shielding(text)
-    inline_kb = await get_projects_cb(id_user, '')
+    inline_kb = InlineKeyboardMarkup(row_width=1)
 
     await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, disable_web_page_preview=True)
 
