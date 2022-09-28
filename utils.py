@@ -182,6 +182,7 @@ async def get_stat(id_chat, id_user=None):
     sort_by_messages = False
     do_not_output_the_number_of_messages = False
     do_not_output_the_number_of_characters = False
+    check_channel_subscription = False
 
     cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
     meaning = cursor.fetchone()
@@ -192,6 +193,7 @@ async def get_stat(id_chat, id_user=None):
         sort_by_messages = meaning[4]
         do_not_output_the_number_of_messages = meaning[5]
         do_not_output_the_number_of_characters = meaning[6]
+        check_channel_subscription = meaning[15]
 
     if statistics_for_everyone or its_admin(id_user, chat_admins) or id_user == None:
         text = '*Активные участники:*\n'
@@ -254,15 +256,25 @@ async def get_stat(id_chat, id_user=None):
 
             count_messages += 1
 
+            channel_subscription = ''
             specifics = ''
             characters = ''
             messages = ''
             response = ''
 
+            if check_channel_subscription:
+                try:
+                    member = await bot.get_chat_member(i[0], id_user)
+                    channel_subscription = ''
+                except Exception:
+                    channel_subscription = 'Не подписан на канал\. \n     — '
+
             if not do_not_output_the_number_of_messages:
                 messages = f'сообщений: {i_messages}'
+
             if not do_not_output_the_number_of_characters:
                 characters = f'символов: {i_characters}'
+
             if requests > 0:
                 response = f'откликов: {i_response} из {requests}'
 
@@ -273,13 +285,16 @@ async def get_stat(id_chat, id_user=None):
             elif i_inactive_days > 0:
                 inactive = f' \(неактивен дней: {int(i_inactive_days)}\)'
             else:
+                if check_channel_subscription:
+                    specifics += channel_subscription
+
                 if sort_by_messages:
-                    specifics = messages
+                    specifics += messages
                     if not characters == '' and not specifics == '':
                         specifics += ', '
                     specifics += characters
                 else:
-                    specifics = characters
+                    specifics += characters
                     if not messages == '' and not specifics == '':
                         specifics += ', '
                     specifics += messages
@@ -390,6 +405,41 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
     #group_name = shielding(meaning[1])
     group_name = meaning[1]
     return '*Группа "' + group_name + '"\.*\n\n' + text, inline_kb
+
+
+async def registration_command(callback_message):
+    id_user = callback_message.from_user.id
+    first_name = callback_message.from_user.first_name
+    last_name = callback_message.from_user.last_name
+    if last_name is None:
+        last_name = ''
+    username = callback_message.from_user.username
+    if username is None:
+        username = ''
+    language_code = callback_message.from_user.language_code
+
+    cursor.execute(f'SELECT id_user FROM users WHERE id_user = {id_user}')
+    result = cursor.fetchone()
+
+    if result is None:
+        cursor.execute(
+            f'''INSERT INTO users (id_user, first_name, last_name, username, language_code, 
+                    registration_date, registration_field, FIO, address, tel, mail, projects) 
+                    VALUES ({id_user}, "{first_name}", "{last_name}", "{username}", "{language_code}", 
+                    datetime("now"), "", "", "", "", "", "")''')
+    else:
+        cursor.execute(
+            f'''UPDATE users SET first_name = "{first_name}", last_name = "{last_name}", 
+                username = "{username}", language_code = "{language_code}", registration_field = "", projects = "" 
+                WHERE id_user = {id_user}''')
+    connect.commit()
+
+    if type(callback_message) == CallbackQuery:
+        message = callback_message.message
+    else:
+        message = callback_message
+
+    await registration_process(message)
 
 
 async def registration_process(message: Message, meaning=''):

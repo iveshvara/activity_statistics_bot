@@ -1,7 +1,8 @@
 
 from bot import bot, dp, cursor, connect
 from settings import CHANNEL_ID, THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME
-from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, registration_process
+from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
+    registration_process, registration_command
 from service import add_buttons_time_selection, get_projects_cb, shielding, its_admin
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
@@ -44,6 +45,118 @@ async def command_get_stat(message: Message):
 
     if not text == '':
         await message.answer(text, parse_mode='MarkdownV2', disable_notification=True)
+
+
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('id_chat '))
+async def choosing_a_chat_to_set_up(callback: CallbackQuery):
+    id_chat = int(callback.data.replace('id_chat ', ''))
+    id_user = callback.from_user.id
+    text, inline_kb = await setting_up_a_chat(id_chat, id_user)
+    await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+
+
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('settings '))
+async def process_parameter(callback: CallbackQuery):
+    id_user = callback.from_user.id
+    list_str = callback.data.split()
+    id_chat = int(list_str[1])
+    parameter_name = list_str[2]
+    parameter_value = ''
+    if len(list_str) > 3:
+        parameter_value = list_str[3]
+
+    # no_blob_parameters = ['period_of_activity', 'report_time']
+    # if parameter_name in no_blob_parameters:
+    #     await process_parameter_input(callback, id_chat, parameter_name, parameter_value)
+    if parameter_name == 'period_of_activity':
+        parameter_value_int = int(parameter_value)
+        adding = 0
+        if 0 <= parameter_value_int < 7:
+            adding = 1
+        # elif 7 <= parameter_value_int < 20:
+        #     adding = 7
+        elif 7 <= parameter_value_int < 21:
+            adding = 7
+        elif parameter_value_int == 21:
+            parameter_value_int = 30
+        elif parameter_value_int == 30:
+            parameter_value_int = 1
+        parameter_value_int += adding
+        await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value_int)
+    # if parameter_name == 'channel':
+    #     cursor.execute(f'UPDATE chats SET state = "channel", message_id = {callback.message.message_id} WHERE id_user = {id_user} AND id_chat = {id_chat}')
+    #     connect.commit()
+    #     inline_kb = InlineKeyboardMarkup(row_width=1)
+    #     inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
+    #     text = shielding('Пришлите пригласительную ссылку на канал, где вы будете публиковать закрытые учебные материалы в виде https://t.me/+SAqGflBSoqpYv2W4')
+    #     await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    else:
+        if parameter_value == '0':
+            parameter_value = '1'
+        else:
+            parameter_value = '0'
+        await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value)
+
+
+@dp.callback_query_handler(text='back')
+async def menu_back(callback: CallbackQuery):
+    id_user = callback.from_user.id
+    text, inline_kb, one_group = await get_start_menu(id_user)
+
+    if one_group is None:
+        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    else:
+        text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
+        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+
+
+@dp.callback_query_handler(text='reg')
+async def reg_command_callback(callback: CallbackQuery):
+    await registration_command(callback)
+
+
+@dp.message_handler(commands=['reg'])
+async def reg_command_message(message: Message):
+    await registration_command(message)
+
+
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('gender ') or x.data.startswith('projects '))
+async def gender_processing(callback: CallbackQuery):
+    await callback.answer()
+
+    value = callback.data
+    value = value.replace('gender ', '')
+    value = value.replace('projects ', '')
+
+    await registration_process(callback.message, value)
+
+
+@dp.chat_join_request_handler()
+async def join(update: ChatJoinRequest):
+    id_user = update.from_user.id
+    cursor.execute(
+        f'''SELECT DISTINCT users.message_id FROM chats
+            INNER JOIN settings ON chats.id_chat = settings.id_chat
+            INNER JOIN users ON chats.id_user = users.id_user	
+            WHERE settings.enable_group AND chats.id_user = {id_user}''')
+    meaning = cursor.fetchone()
+
+    inline_kb = InlineKeyboardMarkup(row_width=1)
+
+    if meaning is None:
+        await update.decline()
+        text = 'Заявка на вступление отклонена. Свяжитесь с вашим куратором для решения этой ситуации.'
+    else:
+        await update.approve()
+        text = '''Все получилось! \nПоздравляем Вас с успешной регистрацией! \nВаша заявка подтверждена на вступление подтверждена, пожалуйста заходите.'''
+        inline_kb.add(InlineKeyboardButton('Зайти в канал.', url=INVITE_LINK))
+        try:
+            await bot.delete_message(chat_id=id_user, message_id=meaning[0])
+        except Exception:
+            pass
+
+    text = shielding(text)
+    await bot.send_message(text=text, chat_id=id_user, reply_markup=inline_kb, parse_mode='MarkdownV2')
 
 
 @dp.message_handler(content_types='any')
@@ -258,135 +371,6 @@ async def message_handler(message):
                            f'date_of_the_last_message = "{date_of_the_last_message}" '
                            f'WHERE id_chat = {id_chat} AND id_user = {id_user}')
         connect.commit()
-
-
-@dp.callback_query_handler(lambda x: x.data and x.data.startswith('id_chat '))
-async def choosing_a_chat_to_set_up(callback: CallbackQuery):
-    id_chat = int(callback.data.replace('id_chat ', ''))
-    id_user = callback.from_user.id
-    text, inline_kb = await setting_up_a_chat(id_chat, id_user)
-    await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
-
-
-@dp.callback_query_handler(lambda x: x.data and x.data.startswith('settings '))
-async def process_parameter(callback: CallbackQuery):
-    id_user = callback.from_user.id
-    list_str = callback.data.split()
-    id_chat = int(list_str[1])
-    parameter_name = list_str[2]
-    parameter_value = ''
-    if len(list_str) > 3:
-        parameter_value = list_str[3]
-
-    # no_blob_parameters = ['period_of_activity', 'report_time']
-    # if parameter_name in no_blob_parameters:
-    #     await process_parameter_input(callback, id_chat, parameter_name, parameter_value)
-    if parameter_name == 'period_of_activity':
-        parameter_value_int = int(parameter_value)
-        adding = 0
-        if 0 <= parameter_value_int < 7:
-            adding = 1
-        # elif 7 <= parameter_value_int < 20:
-        #     adding = 7
-        elif 7 <= parameter_value_int < 21:
-            adding = 7
-        elif parameter_value_int == 21:
-            parameter_value_int = 30
-        elif parameter_value_int == 30:
-            parameter_value_int = 1
-        parameter_value_int += adding
-        await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value_int)
-    # if parameter_name == 'channel':
-    #     cursor.execute(f'UPDATE chats SET state = "channel", message_id = {callback.message.message_id} WHERE id_user = {id_user} AND id_chat = {id_chat}')
-    #     connect.commit()
-    #     inline_kb = InlineKeyboardMarkup(row_width=1)
-    #     inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
-    #     text = shielding('Пришлите пригласительную ссылку на канал, где вы будете публиковать закрытые учебные материалы в виде https://t.me/+SAqGflBSoqpYv2W4')
-    #     await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
-    else:
-        if parameter_value == '0':
-            parameter_value = '1'
-        else:
-            parameter_value = '0'
-        await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value)
-
-
-@dp.callback_query_handler(text='back')
-async def menu_back(callback: CallbackQuery):
-    id_user = callback.from_user.id
-    text, inline_kb, one_group = await get_start_menu(id_user)
-
-    if one_group is None:
-        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
-    else:
-        text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
-        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
-
-
-@dp.callback_query_handler(text='reg')
-async def menu_settings_help(callback: CallbackQuery):
-    id_user = callback.from_user.id
-    first_name = callback.from_user.first_name
-    last_name = callback.from_user.last_name
-    if last_name is None:
-        last_name = ''
-    username = callback.from_user.username
-    if username is None:
-        username = ''
-    language_code = callback.from_user.language_code
-
-    cursor.execute(f'SELECT id_user FROM users WHERE id_user = {id_user}')
-    result = cursor.fetchone()
-
-    if result is None:
-        cursor.execute(
-            f'''INSERT INTO users (id_user, first_name, last_name, username, language_code, 
-                    registration_date, registration_field, FIO, address, tel, mail, projects) 
-                    VALUES ({id_user}, "{first_name}", "{last_name}", "{username}", "{language_code}", 
-                    datetime("now"), "", "", "", "", "", "")''')
-    else:
-        cursor.execute(
-            f'''UPDATE users SET first_name = "{first_name}", last_name = "{last_name}", 
-                username = "{username}", language_code = "{language_code}", registration_field = "", projects = "" 
-                WHERE id_user = {id_user}''')
-    connect.commit()
-
-    await registration_process(callback.message)
-
-
-@dp.callback_query_handler(lambda x: x.data and x.data.startswith('gender ') or x.data.startswith('projects '))
-async def gender_processing(callback: CallbackQuery):
-    await callback.answer()
-
-    value = callback.data
-    value = value.replace('gender ', '')
-    value = value.replace('projects ', '')
-
-    await registration_process(callback.message, value)
-
-
-@dp.chat_join_request_handler()
-async def join(update: ChatJoinRequest):
-    id_user = update.from_user.id
-    cursor.execute(
-        f'''SELECT DISTINCT users.message_id FROM chats
-            INNER JOIN settings ON chats.id_chat = settings.id_chat
-            INNER JOIN users ON chats.id_user = users.id_user	
-            WHERE settings.enable_group AND chats.id_user = {id_user}''')
-    meaning = cursor.fetchone()
-
-    inline_kb = InlineKeyboardMarkup(row_width=1)
-
-    if meaning is None:
-        await update.decline()
-        text = 'Заявка на вступление отклонена. Свяжитесь с вашим куратором для решения этой ситуации.'
-    else:
-        await update.approve()
-        text = '''Все получилось! \nПоздравляем Вас с успешной регистрацией! \nВаша заявка подтверждена на вступление подтверждена, пожалуйста заходите.'''
-        inline_kb.add(InlineKeyboardButton('Зайти в канал.', url=INVITE_LINK))
-
-    text = shielding(text)
-    await bot.edit_message_text(text=text, chat_id=id_user, message_id=meaning[0], reply_markup=inline_kb, parse_mode='MarkdownV2')
 
 
 # dont use
