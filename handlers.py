@@ -44,11 +44,10 @@ async def command_get_stat(message: Message):
         text = ''
 
     if not text == '':
-        print(text)
         try:
             await message.answer(text, parse_mode='MarkdownV2', disable_notification=True)
         except ValueError:
-            print(text)
+            print(f'id_chat: {id_chat}, id_user: {id_user}, text: {text}')
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('id_chat '))

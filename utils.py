@@ -400,7 +400,7 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
             settings.do_not_output_the_number_of_characters,
             settings.period_of_activity,
             settings.report_enabled,
-            projects.name,
+            IFNULL(projects.name, ''),
             settings.check_channel_subscription,
 	        settings.title	
         FROM settings 
