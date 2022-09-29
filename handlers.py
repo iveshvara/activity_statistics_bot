@@ -1,6 +1,6 @@
 
 from bot import bot, dp, cursor, connect
-from settings import THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME
+from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME
 from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
     registration_process, registration_command
 from service import add_buttons_time_selection, shielding, its_admin
@@ -18,10 +18,10 @@ async def command_start(message: Message):
         text, inline_kb, one_group = await get_start_menu(id_user)
 
         if one_group is None:
-            await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, protect_content=True)
+            await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, protect_content=False)
         else:
             text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
-            await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, protect_content=True)
+            await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, protect_content=False)
 
 
 @dp.message_handler(commands=['get_stat'])
@@ -46,7 +46,7 @@ async def command_get_stat(message: Message):
     if not text == '':
         try:
             await message.answer(text, parse_mode='MarkdownV2', disable_notification=True)
-        except ValueError:
+        except Exception:
             print(f'id_chat: {id_chat}, id_user: {id_user}, text: {text}')
 
 

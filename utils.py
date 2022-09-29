@@ -1,9 +1,10 @@
 
-from bot import bot, cursor, connect
-from settings import SUPER_ADMIN_ID, INVITE_LINK
+from bot import bot, cursor, connect, dp
+from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID, INVITE_LINK
 from service import its_admin, shielding, get_name_tg, convert_bool
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
 
 from datetime import datetime
 import asyncio
@@ -89,6 +90,8 @@ async def on_startup(_):
     )''')
 
     connect.commit()
+
+    # dp.middleware.setup(LoggingMiddleware())
 
     asyncio.create_task(scheduler())
 
@@ -180,6 +183,11 @@ async def run_reminder():
         connect.commit()
 
 
+async def on_shutdown(_):
+    text = f'@{THIS_IS_BOT_NAME} is shutdown'
+    await bot.send_message(text=text, chat_id=LOGS_CHANNEL_ID)
+
+
 async def get_stat(id_chat, id_user=None):
     statistics_for_everyone = False
     include_admins_in_statistics = False
@@ -193,16 +201,30 @@ async def get_stat(id_chat, id_user=None):
     do_not_output_the_number_of_characters = False
     check_channel_subscription = False
 
-    cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
+    cursor.execute(
+        f'''SELECT 
+            settings.statistics_for_everyone, 
+            settings.include_admins_in_statistics, 
+            settings.period_of_activity, 
+            settings.sort_by_messages, 
+            settings.do_not_output_the_number_of_messages, 
+            settings.do_not_output_the_number_of_characters, 
+            settings.check_channel_subscription, 
+            projects.channel_id 
+        FROM settings 
+        LEFT OUTER JOIN projects 
+                ON settings.project_id = projects.id
+        WHERE id_chat = {id_chat}''')
     meaning = cursor.fetchone()
     if meaning is not None:
-        statistics_for_everyone = meaning[2]
-        include_admins_in_statistics = meaning[3]
-        period_of_activity = meaning[7]
-        sort_by_messages = meaning[4]
-        do_not_output_the_number_of_messages = meaning[5]
-        do_not_output_the_number_of_characters = meaning[6]
-        check_channel_subscription = meaning[15]
+        statistics_for_everyone = meaning[0]
+        include_admins_in_statistics = meaning[1]
+        period_of_activity = meaning[2]
+        sort_by_messages = meaning[3]
+        do_not_output_the_number_of_messages = meaning[4]
+        do_not_output_the_number_of_characters = meaning[5]
+        check_channel_subscription = meaning[6]
+        channel_id = meaning[7]
 
     if statistics_for_everyone or its_admin(id_user, chat_admins) or id_user == None:
         text = '*Активные участники:*\n'
@@ -271,11 +293,18 @@ async def get_stat(id_chat, id_user=None):
             messages = ''
             response = ''
 
-            if check_channel_subscription:
+            if check_channel_subscription and not channel_id == 0 and not i_deleted:
+                member_status = False
+
                 try:
-                    member = await bot.get_chat_member(i[0], id_user)
-                    channel_subscription = ''
+                    member = await bot.get_chat_member(channel_id, i_id_user)
+                    member_status = not member.status == 'left'
                 except Exception:
+                    pass
+
+                if member_status:
+                    channel_subscription = ''
+                else:
                     channel_subscription = 'Не подписан на канал\. \n     — '
 
             if not do_not_output_the_number_of_messages:
@@ -350,7 +379,7 @@ async def get_start_menu(id_user):
                 # get_chat_administrators - problems
                 member = await bot.get_chat_member(i[0], id_user)
                 get = member.is_chat_admin()
-            except ValueError:
+            except Exception:
                 pass
 
         if get:
