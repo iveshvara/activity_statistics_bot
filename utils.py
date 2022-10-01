@@ -210,7 +210,7 @@ async def get_stat(id_chat, id_user=None):
             settings.do_not_output_the_number_of_messages, 
             settings.do_not_output_the_number_of_characters, 
             settings.check_channel_subscription, 
-            projects.channel_id 
+            IFNULL(projects.channel_id, 0) 
         FROM settings 
         LEFT OUTER JOIN projects 
                 ON settings.project_id = projects.id
@@ -365,8 +365,8 @@ async def get_start_menu(id_user):
         piece = ''
     else:
         piece = f' AND id_user = {id_user}'
-    cursor.execute('SELECT DISTINCT chats.id_chat, settings.title, settings.project_id FROM chats '
-                   'LEFT OUTER JOIN settings ON chats.id_chat = settings.id_chat WHERE settings.enable_group' + piece)
+    cursor.execute('''SELECT DISTINCT settings.id_chat, settings.title, settings.project_id FROM settings
+                        LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat WHERE settings.enable_group''' + piece)
     meaning = cursor.fetchall()
     user_groups = []
     channel_enabled = False
@@ -444,12 +444,12 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
         return '', ''
 
     inline_kb = InlineKeyboardMarkup(row_width=1)
-    if meaning[2]:
+    if meaning[0]:
         inline_kb.add(InlineKeyboardButton(text='Статистика доступна всем', callback_data=f'settings {id_chat} statistics_for_everyone {meaning[0]}'))
     else:
         inline_kb.add(InlineKeyboardButton(text='Статистика доступна только администраторам', callback_data=f'settings {id_chat} statistics_for_everyone {meaning[0]}'))
     inline_kb.add(InlineKeyboardButton(text='Включать админов в статистику: ' + convert_bool(meaning[1]), callback_data=f'settings {id_chat} include_admins_in_statistics {meaning[1]}'))
-    if meaning[4]:
+    if meaning[2]:
         inline_kb.add(InlineKeyboardButton(text='Сортировка по сообщениям', callback_data=f'settings {id_chat} sort_by_messages {meaning[2]}'))
     else:
         inline_kb.add(InlineKeyboardButton(text='Сортировка по количеству символов', callback_data=f'settings {id_chat} sort_by_messages {meaning[2]}'))
@@ -492,8 +492,8 @@ async def registration_command(callback_message):
                     datetime("now"), "", "", "", "", "", "")''')
     else:
         cursor.execute(
-            f'''UPDATE users SET first_name = "{first_name}", last_name = "{last_name}", 
-                username = "{username}", language_code = "{language_code}", registration_field = "", projects = "" 
+            f'''UPDATE users SET first_name = '{first_name}', last_name = '{last_name}', 
+                username = '{username}', language_code = '{language_code}', registration_field = "", projects = "" 
                 WHERE id_user = {id_user}''')
     connect.commit()
 
@@ -586,7 +586,6 @@ async def registration_process(message: Message, meaning='', its_callback=False)
         # text = 'Шаг 7 из 7. \nЕсли вы обучались ранее в наших проектах, пожалуйста, отметьте их:'
 
         new_registration_field = 'done'
-        registration_field = ''
 
         invite_link = INVITE_LINK
         inline_kb = InlineKeyboardMarkup(row_width=1)
@@ -654,12 +653,13 @@ async def registration_process(message: Message, meaning='', its_callback=False)
         except Exception:
             pass
 
-        message = await bot.send_message(text=text, chat_id=id_user, reply_markup=inline_kb, parse_mode='MarkdownV2')
+        if not text == '':
+            message = await bot.send_message(text=text, chat_id=id_user, reply_markup=inline_kb, parse_mode='MarkdownV2')
 
     query_text = ''
 
     if not registration_field == '':
-        query_text = f'{registration_field} = "{meaning}"'
+        query_text = f'''{registration_field} = '{meaning}' '''
 
     if not new_registration_field == '':
         if not query_text == '':
@@ -671,7 +671,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
         query_text += ', '
 
     query_text += f'message_id = {message.message_id}'
-    query_text = 'UPDATE users SET ' + query_text + f' WHERE id_user = {id_user}'
+    query_text = f'''UPDATE users SET {query_text} WHERE id_user = {id_user}'''
     cursor.execute(query_text)
     connect.commit()
 
@@ -686,7 +686,7 @@ async def process_parameter_input(callback: CallbackQuery, id_chat, parameter_na
 
 
 async def process_parameter_continuation(callback: CallbackQuery, id_chat, id_user, parameter_name, parameter_value):
-    cursor.execute(f'UPDATE settings SET {parameter_name} = {parameter_value} WHERE id_chat = {id_chat}')
+    cursor.execute(f'''UPDATE settings SET {parameter_name} = {parameter_value} WHERE id_chat = {id_chat}''')
     connect.commit()
 
     text, inline_kb = await setting_up_a_chat(id_chat, id_user)

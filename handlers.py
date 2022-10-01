@@ -1,6 +1,6 @@
 
 from bot import bot, dp, cursor, connect
-from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME
+from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
     registration_process, registration_command
 from service import add_buttons_time_selection, shielding, its_admin
@@ -102,6 +102,8 @@ async def process_parameter(callback: CallbackQuery):
         for i in projects_tuple:
             inline_kb.add(InlineKeyboardButton(text=i[1], callback_data='settings ' + str(id_chat) + ' project_id ' + str(i[0])))
 
+        inline_kb.add(InlineKeyboardButton(text='Нет проекта', callback_data='settings ' + str(id_chat) + ' project_id 0'))
+
         await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
 
     elif parameter_name == 'project_id':
@@ -111,10 +113,12 @@ async def process_parameter(callback: CallbackQuery):
 
         await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
     else:
+        # parameter_value = not parameter_value
         if parameter_value == '0':
-            parameter_value = '1'
+            parameter_value = 1
         else:
-            parameter_value = '0'
+            parameter_value = 0
+
         await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value)
 
 
@@ -192,7 +196,7 @@ async def message_handler(message):
         # id_chat = result[0]
         # message_id = result[1]
         #
-        # cursor.execute(f'UPDATE settings SET channel = "{message.text}" WHERE id_chat = {id_chat}')
+        # cursor.execute(f'''UPDATE settings SET channel = '{message.text}' WHERE id_chat = {id_chat}''')
         # cursor.execute(f'UPDATE chats SET state = "", message_id = 0 WHERE id_user = {id_user} AND id_chat = {id_chat}')
         # connect.commit()
         #
@@ -231,7 +235,7 @@ async def message_handler(message):
 
         elif message.content_type == 'new_chat_title':
             title = shielding(message.chat.title)
-            cursor.execute(f'UPDATE settings SET title = "{title}" WHERE id_chat = {id_chat}')
+            cursor.execute(f'''UPDATE settings SET title = '{title}' WHERE id_chat = {id_chat}''')
             connect.commit()
 
             return
@@ -263,8 +267,11 @@ async def message_handler(message):
                                 VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, 0, "00:00", True, 
                                 datetime("now"), datetime("now"), 0, False)''')
                         else:
-                            cursor.execute(f'UPDATE settings SET enable_group = True, title = "{title}" WHERE id_chat = {id_chat}')
+                            cursor.execute(f'''UPDATE settings SET enable_group = True, title = '{title}' WHERE id_chat = {id_chat}''')
                         connect.commit()
+
+                        text = shielding(f'Добавлена новая группа "{title}"')
+                        await bot.send_message(text=text, chat_id=SUPER_ADMIN_ID, parse_mode='MarkdownV2')
 
                 else:
                     i_last_name = i.last_name
@@ -279,10 +286,10 @@ async def message_handler(message):
                     meaning = cursor.fetchone()
                     if meaning is None:
                         cursor.execute(
-                            'INSERT INTO chats (id_chat, id_user, first_name, last_name, username, '
-                            'messages, characters, deleted, date_of_the_last_message) '
-                            f'VALUES ({id_chat}, {i.id}, "{i.first_name}", "{i_last_name}", '
-                            f'"{i_username}", 0, 0, False, "{date_of_the_last_message}")')
+                            f'''INSERT INTO chats (id_chat, id_user, first_name, last_name, username, 
+                            messages, characters, deleted, date_of_the_last_message) 
+                            VALUES ({id_chat}, {i.id}, '{i.first_name}', '{i_last_name}', 
+                            '{i_username}', 0, 0, False, '{date_of_the_last_message}')''')
                     else:
                         cursor.execute(
                             f'UPDATE chats SET deleted = False WHERE id_chat = {id_chat} AND id_user = {i.id}')
@@ -301,7 +308,7 @@ async def message_handler(message):
                 id_user = i.id
                 cursor.execute(
                     f'''UPDATE chats SET deleted = True, 
-                    date_of_the_last_message = "{date_of_the_last_message}" 
+                    date_of_the_last_message = '{date_of_the_last_message}' 
                     WHERE id_chat = {id_chat} AND id_user = {id_user}''')
                 connect.commit()
 
@@ -332,38 +339,38 @@ async def message_handler(message):
             if message.from_user.is_bot:
                 return
             characters = len(message.text)
-            if message.text.find('@' + THIS_IS_BOT_NAME) > 0:
-                try:
-                    chat_admins = await bot.get_chat_administrators(id_chat)
-                    if its_admin(id_user, chat_admins):
-                        message_id = message.message_id
-                        cursor.execute(f'SELECT id_user, first_name, last_name, username FROM chats WHERE id_chat = {id_chat} AND deleted = 0')
-                        result = cursor.fetchall()
-                        text = 'Внимание\! Общий опрос\: \n'
-                        for i in result:
-                            i_id_user = i[0]
-                            i_first_name = i[1]
-                            i_last_name = i[2]
-                            i_username = i[3]
-                            name_user = shielding(i_first_name + ' ' + i_last_name).strip()
-                            user = f'[{name_user}](tg://user?id={i_id_user})'
-                            if not i_username == '':
-                                user += f' \(@{shielding(i_username)}\)'
-                            text += user + '\n'
-                        text += 'Чтобы ваш ответ был учтен, необходимо ответить на сообщение куратора, т\.е\. нажать на сообщение куратора и выбрать \"Ответить\"\.'
-                        text += '\n \#ВажноеСообщение'
-                        await message.reply(text, parse_mode='MarkdownV2', disable_notification=True)
-                        cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
-                        connect.commit()
-                except Exception:
-                    pass
-            if message.reply_to_message is not None:
-                autor_id_user = message.from_user.id
-                autor_message_id = message.reply_to_message.message_id
-                cursor.execute(f'SELECT * FROM messages WHERE id_chat = {id_chat} AND id_user = {autor_id_user} AND message_id = {autor_message_id}')
-                meaning = cursor.fetchone()
-                if meaning is not None:
-                    message_id = autor_message_id
+            # if message.text.find('@' + THIS_IS_BOT_NAME) > 0:
+            #     try:
+            #         chat_admins = await bot.get_chat_administrators(id_chat)
+            #         if its_admin(id_user, chat_admins):
+            #             message_id = message.message_id
+            #             cursor.execute(f'SELECT id_user, first_name, last_name, username FROM chats WHERE id_chat = {id_chat} AND deleted = 0')
+            #             result = cursor.fetchall()
+            #             text = 'Внимание\! Общий опрос\: \n'
+            #             for i in result:
+            #                 i_id_user = i[0]
+            #                 i_first_name = i[1]
+            #                 i_last_name = i[2]
+            #                 i_username = i[3]
+            #                 name_user = shielding(i_first_name + ' ' + i_last_name).strip()
+            #                 user = f'[{name_user}](tg://user?id={i_id_user})'
+            #                 if not i_username == '':
+            #                     user += f' \(@{shielding(i_username)}\)'
+            #                 text += user + '\n'
+            #             text += 'Чтобы ваш ответ был учтен, необходимо ответить на сообщение куратора, т\.е\. нажать на сообщение куратора и выбрать \"Ответить\"\.'
+            #             text += '\n \#ВажноеСообщение'
+            #             await message.reply(text, parse_mode='MarkdownV2', disable_notification=True)
+            #             cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
+            #             connect.commit()
+            #     except Exception:
+            #         pass
+            # if message.reply_to_message is not None:
+            #     autor_id_user = message.from_user.id
+            #     autor_message_id = message.reply_to_message.message_id
+            #     cursor.execute(f'SELECT * FROM messages WHERE id_chat = {id_chat} AND id_user = {autor_id_user} AND message_id = {autor_message_id}')
+            #     meaning = cursor.fetchone()
+            #     if meaning is not None:
+            #         message_id = autor_message_id
         elif message.content_type == 'photo' and message.caption is not None:
             characters = len(message.caption)
         elif message.content_type == 'poll':
@@ -383,20 +390,20 @@ async def message_handler(message):
 
         if meaning is None:
             cursor.execute(
-                f'INSERT INTO chats (id_chat, id_user, first_name, last_name, '
-                f'username, messages, characters, deleted, date_of_the_last_message) '
-                f'VALUES ({id_chat}, {id_user}, "{first_name}", "{last_name}", '
-                f'"{username}", 1, {characters}, False, "{date_of_the_last_message}")')
+                f'''INSERT INTO chats (id_chat, id_user, first_name, last_name, 
+                    username, messages, characters, deleted, date_of_the_last_message) 
+                    VALUES ({id_chat}, {id_user}, '{first_name}', '{last_name}', 
+                    '{username}', 1, {characters}, False, '{date_of_the_last_message}')''')
         else:
-            cursor.execute('UPDATE chats SET '
-                           'messages = messages + 1, '
-                           f'characters = characters + {characters}, '
-                           f'first_name = "{first_name}", '
-                           f'last_name = "{last_name}", '
-                           f'username = "{username}", '
-                           f'deleted = False, '
-                           f'date_of_the_last_message = "{date_of_the_last_message}" '
-                           f'WHERE id_chat = {id_chat} AND id_user = {id_user}')
+            cursor.execute(f'''UPDATE chats SET 
+                               messages = messages + 1, 
+                               characters = characters + {characters}, 
+                               first_name = '{first_name}', 
+                               last_name = '{last_name}', 
+                               username = '{username}', 
+                               deleted = False, 
+                               date_of_the_last_message = '{date_of_the_last_message}' 
+                           WHERE id_chat = {id_chat} AND id_user = {id_user}''')
         connect.commit()
 
 
@@ -475,7 +482,7 @@ async def menu_back(callback: CallbackQuery):
         new_value_time = 0
     else:
         new_value_time = 1
-    cursor.execute(f'UPDATE meetings SET id_user = {id_user}, _{time} = {new_value_time} WHERE id_chat = {id_chat} AND day = "{day}"')
+    cursor.execute(f'''UPDATE meetings SET id_user = {id_user}, _{time} = {new_value_time} WHERE id_chat = {id_chat} AND day = '{day}' ''')
     connect.commit()
 
     await callback.answer()
@@ -485,7 +492,7 @@ async def menu_back(callback: CallbackQuery):
 async def handle_location(message: Message):
     id_user = message.from_user.id
     tel = message.contact.phone_number
-    cursor.execute(f'''UPDATE users SET tel = "{tel}" WHERE id_user = {id_user}''')
+    cursor.execute(f'''UPDATE users SET tel = '{tel}' WHERE id_user = {id_user}''')
     connect.commit()
 
     await message.answer('ok', parse_mode='MarkdownV2', reply_markup=ReplyKeyboardRemove(), disable_web_page_preview=True)
@@ -504,7 +511,7 @@ async def handle_location(message: Message):
     longitude = message.location.longitude
     language_code = message.from_user.language_code
 
-    cursor.execute(f'UPDATE users SET latitude = "{latitude}", longitude = "{longitude}" WHERE id_user = {id_user}')
+    cursor.execute(f'''UPDATE users SET latitude = '{latitude}', longitude = '{longitude}' WHERE id_user = {id_user}''')
     connect.commit()
 
     # geolocator = Nominatim(user_agent="vaishnava_reminder_bot")
@@ -527,7 +534,7 @@ async def handle_location(message: Message):
         elif i['kind'] == 'locality' and city == '':
             city = i['name']
 
-    cursor.execute(f'UPDATE users SET address = "{address}", country = "{country}", area = "{area}", city = "{city}" WHERE id_user = {id_user}')
+    cursor.execute(f'''UPDATE users SET address = '{address}', country = '{country}', area = '{area}', city = '{city}' WHERE id_user = {id_user}''')
     connect.commit()
 
     if area in ("Севастополь", "Республика Крым"):
