@@ -2,7 +2,7 @@
 from bot import bot, dp, cursor, connect
 from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
-    registration_process, registration_command
+    registration_process, registration_command, insert_or_update_chats
 from service import add_buttons_time_selection, shielding, prepare_text
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
@@ -46,7 +46,7 @@ async def command_get_stat(message: Message):
     if not text == '':
         try:
             await message.answer(text, parse_mode='MarkdownV2', disable_notification=True)
-        except Exception:
+        except Exception as e:
             print(f'id_chat: {id_chat}, id_user: {id_user}, text: {text}')
 
 
@@ -176,7 +176,7 @@ async def join(update: ChatJoinRequest):
         inline_kb.add(InlineKeyboardButton('Зайти в канал.', url=INVITE_LINK))
         try:
             await bot.delete_message(chat_id=id_user, message_id=meaning[0])
-        except Exception:
+        except Exception as e:
             pass
 
     text = shielding(text)
@@ -274,34 +274,10 @@ async def message_handler(message):
                         await bot.send_message(text=text, chat_id=SUPER_ADMIN_ID, parse_mode='MarkdownV2')
 
                 else:
-                    i_first_name = prepare_text(i.first_name)
-
-                    i_last_name = prepare_text(i.last_name)
-                    if i_last_name is None:
-                        i_last_name = ''
-
+                    i_first_name = i.first_name
+                    i_last_name = i.last_name
                     i_username = i.username
-                    if i_username is None:
-                        i_username = ''
-
-                    cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {i.id}')
-                    meaning = cursor.fetchone()
-                    if meaning is None:
-                        cursor.execute(
-                            f'''INSERT INTO chats (id_chat, id_user, first_name, last_name, 
-                                username, messages, characters, deleted, date_of_the_last_message) 
-                                VALUES ({id_chat}, {i.id}, {i_first_name}, {i_last_name}, 
-                                '{i_username}', 1, 0, False, '{date_of_the_last_message}')''')
-                    else:
-                        cursor.execute(f'''UPDATE chats SET 
-                                           messages = messages + 1, 
-                                           first_name = {i_first_name}, 
-                                           last_name = {i_last_name}, 
-                                           username = '{i_username}', 
-                                           deleted = False, 
-                                           date_of_the_last_message = '{date_of_the_last_message}' 
-                                       WHERE id_chat = {id_chat} AND id_user = {i.id}''')
-                    connect.commit()
+                    await insert_or_update_chats(id_chat, i.id, i.first_name, i.last_name, i.username, 0, date_of_the_last_message)
 
             return
 
@@ -332,13 +308,9 @@ async def message_handler(message):
             return
 
         id_user = message.from_user.id
-        first_name = prepare_text(message.from_user.first_name)
-        last_name = prepare_text(message.from_user.last_name)
-        if last_name is None:
-            last_name = ''
+        first_name = message.from_user.first_name
+        last_name = message.from_user.last_name
         username = message.from_user.username
-        if username is None:
-            username = ''
         characters = 0
 
         message_id = 0
@@ -369,7 +341,7 @@ async def message_handler(message):
             #             await message.reply(text, parse_mode='MarkdownV2', disable_notification=True)
             #             cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
             #             connect.commit()
-            #     except Exception:
+            #     except Exception as e:
             #         pass
             # if message.reply_to_message is not None:
             #     autor_id_user = message.from_user.id
@@ -395,23 +367,7 @@ async def message_handler(message):
         cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {id_user}')
         meaning = cursor.fetchone()
 
-        if meaning is None:
-            cursor.execute(
-                f'''INSERT INTO chats (id_chat, id_user, first_name, last_name, 
-                    username, messages, characters, deleted, date_of_the_last_message) 
-                    VALUES ({id_chat}, {id_user}, {first_name}, {last_name}, 
-                    '{username}', 1, {characters}, False, '{date_of_the_last_message}')''')
-        else:
-            cursor.execute(f'''UPDATE chats SET 
-                               messages = messages + 1, 
-                               characters = characters + {characters}, 
-                               first_name = {first_name}, 
-                               last_name = {last_name}, 
-                               username = '{username}', 
-                               deleted = False, 
-                               date_of_the_last_message = '{date_of_the_last_message}' 
-                           WHERE id_chat = {id_chat} AND id_user = {id_user}''')
-        connect.commit()
+        await insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message)
 
 
 # dont use

@@ -1,7 +1,7 @@
 
 from bot import bot, cursor, connect, dp
 from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID, INVITE_LINK
-from service import its_admin, shielding, get_name_tg, convert_bool
+from service import its_admin, shielding, get_name_tg, convert_bool, prepare_text
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
@@ -177,7 +177,7 @@ async def run_reminder():
         text = 'Сегодня не откликнулись на запрос\: \n' + text + '\n \#ВажноеСообщение'
         try:
             await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
-        except Exception:
+        except Exception as e:
             pass
         cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
         connect.commit()
@@ -193,7 +193,7 @@ async def get_stat(id_chat, id_user=None):
     include_admins_in_statistics = False
     try:
         chat_admins = await bot.get_chat_administrators(id_chat)
-    except Exception:
+    except Exception as e:
         chat_admins = ()
     period_of_activity = 0
     sort_by_messages = False
@@ -300,7 +300,7 @@ async def get_stat(id_chat, id_user=None):
                 try:
                     member = await bot.get_chat_member(channel_id, i_id_user)
                     member_status = not member.status == 'left'
-                except Exception:
+                except Exception as e:
                     pass
 
                 if member_status:
@@ -380,7 +380,7 @@ async def get_start_menu(id_user):
                 # get_chat_administrators - problems
                 member = await bot.get_chat_member(i[0], id_user)
                 get = member.is_chat_admin()
-            except Exception:
+            except Exception as e:
                 pass
 
         if get:
@@ -537,7 +537,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
         else:
             try:
                 await message.delete()
-            except Exception:
+            except Exception as e:
                 pass
             return
 
@@ -560,13 +560,13 @@ async def registration_process(message: Message, meaning='', its_callback=False)
             try:
                 meaning = datetime.strptime(meaning, format_date)
                 fail = False
-            except Exception:
+            except Exception as e:
                 fail = True
 
         if fail:
             try:
                 await message.delete()
-            except Exception:
+            except Exception as e:
                 pass
             return
 
@@ -636,7 +636,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
     #     else:
     #         try:
     #             await message.delete()
-    #         except Exception:
+    #         except Exception as e:
     #             pass
     #         return
 
@@ -647,11 +647,11 @@ async def registration_process(message: Message, meaning='', its_callback=False)
         if message_id is not None and not message_id == '' and not message_id == message.message_id:
             try:
                 await bot.delete_message(chat_id=id_user, message_id=message_id)
-            except Exception:
+            except Exception as e:
                 pass
         try:
             await message.delete()
-        except Exception:
+        except Exception as e:
             pass
 
         if not text == '':
@@ -692,3 +692,39 @@ async def process_parameter_continuation(callback: CallbackQuery, id_chat, id_us
 
     text, inline_kb = await setting_up_a_chat(id_chat, id_user)
     await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+
+
+async def insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message):
+    first_name = prepare_text(first_name)
+
+    if last_name is None:
+        last_name = ''
+    last_name = prepare_text(last_name)
+
+    if username is None:
+        username = ''
+
+    cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {id_user}')
+    meaning = cursor.fetchone()
+    if meaning is None:
+        text = f'''INSERT INTO chats (id_chat, id_user, first_name, last_name, 
+                        username, messages, characters, deleted, date_of_the_last_message) 
+                    VALUES ({id_chat}, {id_user}, {first_name}, {last_name}, 
+                        '{username}', 1, {characters}, False, '{date_of_the_last_message}')'''
+    else:
+        text = f'''UPDATE chats SET 
+                       messages = messages + 1, 
+                       characters = characters + {characters}, 
+                       first_name = {first_name}, 
+                       last_name = {last_name}, 
+                       username = '{username}', 
+                       deleted = False, 
+                       date_of_the_last_message = '{date_of_the_last_message}' 
+                   WHERE id_chat = {id_chat} AND id_user = {id_user}'''
+
+    try:
+        cursor.execute(text)
+        connect.commit()
+    except Exception as e:
+        await bot.send_message(text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}',
+                               chat_id=LOGS_CHANNEL_ID)
