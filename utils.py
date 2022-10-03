@@ -200,6 +200,7 @@ async def get_stat(id_chat, id_user=None):
     do_not_output_the_number_of_messages = False
     do_not_output_the_number_of_characters = False
     check_channel_subscription = False
+    channel_id = 0
 
     cursor.execute(
         f'''SELECT 

@@ -3,7 +3,7 @@ from bot import bot, dp, cursor, connect
 from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
     registration_process, registration_command
-from service import add_buttons_time_selection, shielding, its_admin
+from service import add_buttons_time_selection, shielding, prepare_text
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatJoinRequest
@@ -274,7 +274,9 @@ async def message_handler(message):
                         await bot.send_message(text=text, chat_id=SUPER_ADMIN_ID, parse_mode='MarkdownV2')
 
                 else:
-                    i_last_name = i.last_name
+                    i_first_name = prepare_text(i.first_name)
+
+                    i_last_name = prepare_text(i.last_name)
                     if i_last_name is None:
                         i_last_name = ''
 
@@ -286,14 +288,19 @@ async def message_handler(message):
                     meaning = cursor.fetchone()
                     if meaning is None:
                         cursor.execute(
-                            f'''INSERT INTO chats (id_chat, id_user, first_name, last_name, username, 
-                            messages, characters, deleted, date_of_the_last_message) 
-                            VALUES ({id_chat}, {i.id}, '{i.first_name}', '{i_last_name}', 
-                            '{i_username}', 0, 0, False, '{date_of_the_last_message}')''')
+                            f'''INSERT INTO chats (id_chat, id_user, first_name, last_name, 
+                                username, messages, characters, deleted, date_of_the_last_message) 
+                                VALUES ({id_chat}, {i.id}, {i_first_name}, {i_last_name}, 
+                                '{i_username}', 1, 0, False, '{date_of_the_last_message}')''')
                     else:
-                        cursor.execute(
-                            f'UPDATE chats SET deleted = False WHERE id_chat = {id_chat} AND id_user = {i.id}')
-
+                        cursor.execute(f'''UPDATE chats SET 
+                                           messages = messages + 1, 
+                                           first_name = {i_first_name}, 
+                                           last_name = {i_last_name}, 
+                                           username = '{i_username}', 
+                                           deleted = False, 
+                                           date_of_the_last_message = '{date_of_the_last_message}' 
+                                       WHERE id_chat = {id_chat} AND id_user = {i.id}''')
                     connect.commit()
 
             return
@@ -325,8 +332,8 @@ async def message_handler(message):
             return
 
         id_user = message.from_user.id
-        first_name = message.from_user.first_name
-        last_name = message.from_user.last_name
+        first_name = prepare_text(message.from_user.first_name)
+        last_name = prepare_text(message.from_user.last_name)
         if last_name is None:
             last_name = ''
         username = message.from_user.username
@@ -392,14 +399,14 @@ async def message_handler(message):
             cursor.execute(
                 f'''INSERT INTO chats (id_chat, id_user, first_name, last_name, 
                     username, messages, characters, deleted, date_of_the_last_message) 
-                    VALUES ({id_chat}, {id_user}, '{first_name}', '{last_name}', 
+                    VALUES ({id_chat}, {id_user}, {first_name}, {last_name}, 
                     '{username}', 1, {characters}, False, '{date_of_the_last_message}')''')
         else:
             cursor.execute(f'''UPDATE chats SET 
                                messages = messages + 1, 
                                characters = characters + {characters}, 
-                               first_name = '{first_name}', 
-                               last_name = '{last_name}', 
+                               first_name = {first_name}, 
+                               last_name = {last_name}, 
                                username = '{username}', 
                                deleted = False, 
                                date_of_the_last_message = '{date_of_the_last_message}' 

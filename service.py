@@ -43,6 +43,17 @@ def shielding(text):
     return text_result
 
 
+def prepare_text(text):
+    if text is None:
+        text_result = ''
+    elif text.find("'"):
+        text_result = '"' + text + '"'
+    else:
+        text_result = "'" + text + "'"
+
+    return text_result
+
+
 def add_buttons_time_selection(shift):
     inline_kb = InlineKeyboardMarkup(row_width=7)
     massive = []
