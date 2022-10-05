@@ -3,7 +3,7 @@ from bot import bot, dp, cursor, connect
 from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
     registration_process, registration_command, insert_or_update_chats
-from service import add_buttons_time_selection, shielding, prepare_text
+from service import add_buttons_time_selection, shielding
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatJoinRequest
@@ -95,7 +95,7 @@ async def process_parameter(callback: CallbackQuery):
     #     await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
     elif parameter_name == 'project_name':
         text = shielding('Выберете ваш проект:')
-        cursor.execute(f'SELECT id, name FROM projects')
+        cursor.execute('SELECT id, name FROM projects')
         projects_tuple = cursor.fetchall()
 
         inline_kb = InlineKeyboardMarkup(row_width=1)
@@ -107,7 +107,7 @@ async def process_parameter(callback: CallbackQuery):
         await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
 
     elif parameter_name == 'project_id':
-        cursor.execute(f'''UPDATE settings SET project_id = {parameter_value} WHERE id_chat = {id_chat}''')
+        cursor.execute('UPDATE settings SET project_id = ? WHERE id_chat = ?', (parameter_value, id_chat))
         connect.commit()
         text, inline_kb = await setting_up_a_chat(id_chat, id_user)
 
@@ -159,10 +159,10 @@ async def gender_processing(callback: CallbackQuery):
 async def join(update: ChatJoinRequest):
     id_user = update.from_user.id
     cursor.execute(
-        f'''SELECT DISTINCT users.message_id FROM chats
+        '''SELECT DISTINCT users.message_id FROM chats
             INNER JOIN settings ON chats.id_chat = settings.id_chat
             INNER JOIN users ON chats.id_user = users.id_user	
-            WHERE settings.enable_group AND chats.id_user = {id_user}''')
+            WHERE settings.enable_group AND chats.id_user = ?''', (id_user,))
     meaning = cursor.fetchone()
 
     inline_kb = InlineKeyboardMarkup(row_width=1)
@@ -223,29 +223,29 @@ async def message_handler(message):
         elif message.content_type in created_title_content_type:
             title = shielding(message.chat.title)
             cursor.execute(
-                f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
+                '''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
                 sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
                 period_of_activity, report_enabled, project_id, report_time, enable_group, 
                 last_notify_date, last_notify_message_id_date, channel, check_channel_subscription) 
-                VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, 0, "00:00", True, 
-                datetime("now"), datetime("now"), 0, False)''')
+                VALUES (?, ?, False, False, False, False, False, 7, False, 0, "00:00", True, 
+                datetime("now"), datetime("now"), 0, False)''', (id_chat, title))
             connect.commit()
 
             return
 
         elif message.content_type == 'new_chat_title':
             title = shielding(message.chat.title)
-            cursor.execute(f'''UPDATE settings SET title = '{title}' WHERE id_chat = {id_chat}''')
+            cursor.execute('UPDATE settings SET title = ? WHERE id_chat = ?', (title, id_chat))
             connect.commit()
 
             return
 
         elif message.content_type == 'migrate_to_chat_id':
             new_id_chat = message.migrate_to_chat_id
-            cursor.execute(f'UPDATE chats SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
-            cursor.execute(f'UPDATE meetings SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
-            cursor.execute(f'UPDATE messages SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
-            cursor.execute(f'UPDATE settings SET id_chat = {new_id_chat} WHERE id_chat = {id_chat}')
+            cursor.execute('UPDATE chats SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
+            cursor.execute('UPDATE meetings SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
+            cursor.execute('UPDATE messages SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
+            cursor.execute('UPDATE settings SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
             connect.commit()
 
             return
@@ -256,18 +256,19 @@ async def message_handler(message):
                     if i.username == THIS_IS_BOT_NAME:
                         title = shielding(message.chat.title)
 
-                        cursor.execute(f'SELECT * FROM settings WHERE id_chat = {id_chat}')
+                        cursor.execute('SELECT * FROM settings WHERE id_chat = ?', (id_chat,))
                         meaning = cursor.fetchone()
                         if meaning is None:
                             cursor.execute(
-                                f'''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
+                                '''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
                                 sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
                                 period_of_activity, report_enabled, project_id, report_time, enable_group, 
                                 last_notify_date, last_notify_message_id_date, channel, check_channel_subscription) 
-                                VALUES ({id_chat}, "{title}", False, False, False, False, False, 7, False, 0, "00:00", True, 
-                                datetime("now"), datetime("now"), 0, False)''')
+                                VALUES (?, ?, False, False, False, False, False, 7, False, 0, "00:00", True, 
+                                datetime("now"), datetime("now"), 0, False)''', (id_chat, title))
                         else:
-                            cursor.execute(f'''UPDATE settings SET enable_group = True, title = '{title}' WHERE id_chat = {id_chat}''')
+                            cursor.execute('UPDATE settings SET enable_group = True, title = ? WHERE id_chat = ?',
+                                           (title, id_chat))
                         connect.commit()
 
                         text = shielding(f'Добавлена новая группа "{title}"')
@@ -285,20 +286,19 @@ async def message_handler(message):
             i = message.left_chat_member
             if i.is_bot:
                 if i.username == THIS_IS_BOT_NAME:
-                    cursor.execute(f'UPDATE settings SET enable_group = False WHERE id_chat = {id_chat}')
+                    cursor.execute('UPDATE settings SET enable_group = False WHERE id_chat = ?', (id_chat,))
                     connect.commit()
             else:
                 id_user = i.id
                 cursor.execute(
-                    f'''UPDATE chats SET deleted = True, 
-                    date_of_the_last_message = '{date_of_the_last_message}' 
-                    WHERE id_chat = {id_chat} AND id_user = {id_user}''')
+                    'UPDATE chats SET deleted = True, date_of_the_last_message = ? WHERE id_chat = ? AND id_user = ?',
+                    (date_of_the_last_message, id_chat, id_user))
                 connect.commit()
 
                 cursor.execute(
-                    f'''SELECT projects.channel_id FROM settings 
+                    '''SELECT projects.channel_id FROM settings 
                     INNER JOIN projects ON settings.project_id = projects.id 
-                    AND settings.id_chat = {id_chat}''')
+                    AND settings.id_chat = ?''', (id_chat,))
                 meaning = cursor.fetchone()
                 if meaning is not None:
                     channel_id = meaning[0]
@@ -360,12 +360,12 @@ async def message_handler(message):
         if message.from_user.is_bot:
             return
 
-        cursor.execute('INSERT INTO messages (id_chat, id_user, date, characters, message_id) '
-                       f'VALUES ({id_chat}, {id_user}, "{date_of_the_last_message}", {characters}, {message_id})')
+        cursor.execute('INSERT INTO messages (id_chat, id_user, date, characters, message_id) VALUES (?, ?, ?, ?, ?)',
+                       (id_chat, id_user, date_of_the_last_message, characters, message_id))
         connect.commit()
 
-        cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {id_user}')
-        meaning = cursor.fetchone()
+        # cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {id_user}')
+        # meaning = cursor.fetchone()
 
         await insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message)
 
@@ -397,7 +397,7 @@ async def command_call_meeting(message: Message):
     text = ''
     count_messages = 0
 
-    cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat}')
+    cursor.execute('SELECT * FROM chats WHERE id_chat = ?', (id_chat,))
     meaning = cursor.fetchall()
     for i in meaning:
         count_messages += 1
@@ -424,20 +424,22 @@ async def menu_back(callback: CallbackQuery):
     time = list_data[2]
     index_time = int(time) + 3
 
-    cursor.execute(f'SELECT * FROM meetings WHERE id_chat = {id_chat} AND id_user = {id_user}')
+    cursor.execute('SELECT * FROM meetings WHERE id_chat = ? AND id_user = ?', (id_chat, id_user))
     meaning = cursor.fetchall()
     if len(meaning) == 0:
         for i in week:
             cursor.execute(
-                'INSERT INTO meetings (id_chat, id_user, day, '
-                '_00, _01, _02, _03, _04, _05, _06, _07, _08, _09, _10, _11, '
-                '_12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23)'
-                f'VALUES ({id_chat}, {id_user}, "{i}", '
-                'False, False, False, False, False, False, False, False, False, False, False, False, '
-                'False, False, False, False, False, False, False, False, False, False, False, False)')
+                '''INSERT INTO meetings (id_chat, id_user, day, 
+                _00, _01, _02, _03, _04, _05, _06, _07, _08, _09, _10, _11, 
+                _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23)
+                VALUES (?, ?, ?, 
+                False, False, False, False, False, False, False, False, False, False, False, False, 
+                False, False, False, False, False, False, False, False, False, False, False, False)''',
+                (id_chat, id_user, i)
+            )
             connect.commit()
 
-            cursor.execute(f'SELECT * FROM meetings WHERE id_chat = {id_chat} AND id_user = {id_user}')
+            cursor.execute('SELECT * FROM meetings WHERE id_chat = ? AND id_user = ?', (id_chat, id_user))
             meaning = cursor.fetchall()
 
     new_value_time = meaning[index_day][index_time]
@@ -445,7 +447,8 @@ async def menu_back(callback: CallbackQuery):
         new_value_time = 0
     else:
         new_value_time = 1
-    cursor.execute(f'''UPDATE meetings SET id_user = {id_user}, _{time} = {new_value_time} WHERE id_chat = {id_chat} AND day = '{day}' ''')
+    cursor.execute('UPDATE meetings SET id_user = ?, ? = ? WHERE id_chat = ? AND day = ?',
+                   (id_user, '_' + str(time), new_value_time, id_chat, day))
     connect.commit()
 
     await callback.answer()
@@ -531,9 +534,9 @@ async def handle_location(message: Message):
 
 @dp.channel_post_handler()
 async def join(message: Message):
-    qwe=1
+    pass
 
 
 @dp.chat_member_handler()
 async def join(update):
-    qwe=1
+    pass

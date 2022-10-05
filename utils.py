@@ -1,7 +1,7 @@
 
 from bot import bot, cursor, connect, dp
 from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID, INVITE_LINK
-from service import its_admin, shielding, get_name_tg, convert_bool, prepare_text
+from service import its_admin, shielding, get_name_tg, convert_bool
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
@@ -114,7 +114,7 @@ async def run_reminder():
         # if not text == '' and not text == 'Нет статистики для отображения\.':
         if not text == '':
             await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
-            cursor.execute(f'UPDATE settings SET last_notify_date = datetime("now") WHERE id_chat = {id_chat}')
+            cursor.execute('UPDATE settings SET last_notify_date = datetime("now") WHERE id_chat = ?', (id_chat, ))
             connect.commit()
 
     text = ''
@@ -179,7 +179,7 @@ async def run_reminder():
             await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
         except Exception as e:
             pass
-        cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
+        cursor.execute('UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = ?', (id_chat, ))
         connect.commit()
 
 
@@ -203,7 +203,7 @@ async def get_stat(id_chat, id_user=None):
     channel_id = 0
 
     cursor.execute(
-        f'''SELECT 
+        '''SELECT 
             settings.statistics_for_everyone, 
             settings.include_admins_in_statistics, 
             settings.period_of_activity, 
@@ -215,7 +215,7 @@ async def get_stat(id_chat, id_user=None):
         FROM settings 
         LEFT OUTER JOIN projects 
                 ON settings.project_id = projects.id
-        WHERE id_chat = {id_chat}''')
+        WHERE id_chat = ?''', (id_chat,))
     meaning = cursor.fetchone()
     if meaning is not None:
         statistics_for_everyone = meaning[0]
@@ -240,19 +240,32 @@ async def get_stat(id_chat, id_user=None):
             f'''SELECT chats.id_user, chats.first_name, chats.last_name, chats.username, 
             SUM(IFNULL(messages.characters, 0)) AS characters, COUNT(messages.characters) AS messages, 
             chats.deleted, chats.date_of_the_last_message, 
-                CASE WHEN NOT chats.deleted AND {period_of_activity} > ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) THEN 0 
+                CASE WHEN NOT chats.deleted AND ? > ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) THEN 0 
                 ELSE ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) END AS inactive_days,
                 (SELECT COUNT(DISTINCT message_id) FROM messages 
-                WHERE chats.id_chat = messages.id_chat AND messages.message_id IS NOT NULL AND NOT messages.message_id = 0 AND 7 > ROUND(julianday("now") - julianday(date), 0)) AS requests,
+                    WHERE chats.id_chat = messages.id_chat 
+                        AND messages.message_id IS NOT NULL 
+                        AND NOT messages.message_id = 0 
+                        AND 7 > ROUND(julianday("now") - julianday(date), 0)
+                ) AS requests,
                 (SELECT COUNT(DISTINCT messages_two.message_id) FROM messages AS messages_one 
-                INNER JOIN messages AS messages_two ON messages_one.id_chat = messages_two.id_chat AND messages_one.message_id = messages_two.message_id AND chats.id_user = messages_two.id_user
-                WHERE chats.id_chat = messages_one.id_chat AND messages_one.message_id IS NOT NULL AND NOT messages_one.message_id = 0 AND 7 > ROUND(julianday("now") - julianday(messages_one.date), 0)) AS response 
+                    INNER JOIN messages AS messages_two 
+                    ON messages_one.id_chat = messages_two.id_chat 
+                        AND messages_one.message_id = messages_two.message_id 
+                        AND chats.id_user = messages_two.id_user
+                    WHERE chats.id_chat = messages_one.id_chat 
+                        AND messages_one.message_id IS NOT NULL 
+                        AND NOT messages_one.message_id = 0 
+                        AND 7 > ROUND(julianday("now") - julianday(messages_one.date), 0)
+                ) AS response 
             FROM chats 
-            LEFT JOIN messages ON chats.id_chat = messages.id_chat AND chats.id_user = messages.id_user 
-                AND {period_of_activity} > ROUND(julianday("now") - julianday(messages.date), 0) 
-            WHERE chats.id_chat = {id_chat} 
+            LEFT JOIN messages 
+                ON chats.id_chat = messages.id_chat 
+                    AND chats.id_user = messages.id_user 
+                    AND ? > ROUND(julianday("now") - julianday(messages.date), 0) 
+            WHERE chats.id_chat = ? 
             GROUP BY chats.id_chat, chats.id_user, chats.first_name, chats.last_name, chats.username, chats.date_of_the_last_message, chats.deleted 
-            ORDER BY deleted ASC, inactive_days ASC, {sort} DESC '''
+            ORDER BY deleted ASC, inactive_days ASC, ? DESC ''', (period_of_activity, period_of_activity, id_chat, sort)
         )
         meaning = cursor.fetchall()
 
@@ -422,7 +435,7 @@ async def get_start_menu(id_user):
 
 async def setting_up_a_chat(id_chat, id_user, back_button=True):
     cursor.execute(
-        f'''SELECT 
+        '''SELECT 
             settings.statistics_for_everyone,
             settings.include_admins_in_statistics,
             settings.sort_by_messages,
@@ -438,7 +451,8 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
                 ON settings.project_id = projects.id
         WHERE 
             enable_group 
-            AND id_chat = {id_chat}''')
+            AND id_chat = ?''', (id_chat,)
+    )
     meaning = cursor.fetchone()
 
     if meaning is None:
@@ -482,20 +496,19 @@ async def registration_command(callback_message):
         username = ''
     language_code = callback_message.from_user.language_code
 
-    cursor.execute(f'SELECT id_user FROM users WHERE id_user = {id_user}')
+    cursor.execute('SELECT id_user FROM users WHERE id_user = ?', (id_user,))
     result = cursor.fetchone()
 
     if result is None:
-        cursor.execute(
-            f'''INSERT INTO users (id_user, first_name, last_name, username, language_code, 
-                    registration_date, registration_field, FIO, address, tel, mail, projects) 
-                    VALUES ({id_user}, "{first_name}", "{last_name}", "{username}", "{language_code}", 
-                    datetime("now"), "", "", "", "", "", "")''')
+        cursor.execute('''INSERT INTO users (id_user, first_name, last_name, username, language_code, 
+            registration_date, registration_field, FIO, address, tel, mail, projects) 
+            VALUES (?, ?, ?, ?, ?, datetime("now"), "", "", "", "", "", "")''',
+            (id_user, first_name, last_name, username, language_code))
     else:
         cursor.execute(
-            f'''UPDATE users SET first_name = '{first_name}', last_name = '{last_name}', 
-                username = '{username}', language_code = '{language_code}', registration_field = "", projects = "" 
-                WHERE id_user = {id_user}''')
+            '''UPDATE users SET first_name = ?, last_name = ?, username = ?, language_code = ?, 
+            registration_field = "", projects = "" 
+            WHERE id_user = ?''', (first_name, last_name, username, language_code, id_user))
     connect.commit()
 
     if type(callback_message) == CallbackQuery:
@@ -509,7 +522,7 @@ async def registration_command(callback_message):
 async def registration_process(message: Message, meaning='', its_callback=False):
     id_user = message.chat.id
 
-    cursor.execute(f'SELECT registration_field, message_id FROM users WHERE id_user = {id_user}')
+    cursor.execute('SELECT registration_field, message_id FROM users WHERE id_user = ?', (id_user,))
     result_tuple = cursor.fetchone()
 
     # if result_tuple is None or result_tuple[0] == '':
@@ -687,7 +700,7 @@ async def process_parameter_input(callback: CallbackQuery, id_chat, parameter_na
 
 
 async def process_parameter_continuation(callback: CallbackQuery, id_chat, id_user, parameter_name, parameter_value):
-    cursor.execute(f'''UPDATE settings SET {parameter_name} = {parameter_value} WHERE id_chat = {id_chat}''')
+    cursor.execute(f'UPDATE settings SET {parameter_name} = ? WHERE id_chat = ?', (parameter_value, id_chat))
     connect.commit()
 
     text, inline_kb = await setting_up_a_chat(id_chat, id_user)
@@ -695,35 +708,25 @@ async def process_parameter_continuation(callback: CallbackQuery, id_chat, id_us
 
 
 async def insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message):
-    first_name = prepare_text(first_name)
-
     if last_name is None:
         last_name = ''
-    last_name = prepare_text(last_name)
 
     if username is None:
         username = ''
 
-    cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {id_user}')
+    cursor.execute('SELECT * FROM chats WHERE id_chat = ? AND id_user = ?', (id_chat, id_user))
     meaning = cursor.fetchone()
     if meaning is None:
-        text = f'''INSERT INTO chats (id_chat, id_user, first_name, last_name, 
-                        username, messages, characters, deleted, date_of_the_last_message) 
-                    VALUES ({id_chat}, {id_user}, {first_name}, {last_name}, 
-                        '{username}', 1, {characters}, False, '{date_of_the_last_message}')'''
+        text = '''INSERT INTO chats (id_chat, id_user, first_name, last_name, username, messages, characters, 
+            deleted, date_of_the_last_message) VALUES (?, ?, ?, ?, ?, 1, ?, False, ?)'''
+        values = (id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message)
     else:
-        text = f'''UPDATE chats SET 
-                       messages = messages + 1, 
-                       characters = characters + {characters}, 
-                       first_name = {first_name}, 
-                       last_name = {last_name}, 
-                       username = '{username}', 
-                       deleted = False, 
-                       date_of_the_last_message = '{date_of_the_last_message}' 
-                   WHERE id_chat = {id_chat} AND id_user = {id_user}'''
-
+        text = f'''UPDATE chats SET messages = messages + 1, characters = characters + ?, first_name = ?, 
+            last_name = ?, username = ?, deleted = False, date_of_the_last_message = ? 
+            WHERE id_chat = ? AND id_user = ?'''
+        values = (characters, first_name, last_name, username, date_of_the_last_message, id_chat, id_user)
     try:
-        cursor.execute(text)
+        cursor.execute(text, values)
         connect.commit()
     except Exception as e:
         await bot.send_message(text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}',
