@@ -1,6 +1,6 @@
 
 from bot import bot, cursor, connect, dp
-from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID, INVITE_LINK
+from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID
 from service import its_admin, shielding, get_name_tg, convert_bool
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -184,8 +184,9 @@ async def run_reminder():
 
 
 async def on_shutdown(_):
-    text = f'@{THIS_IS_BOT_NAME} is shutdown'
-    await bot.send_message(text=text, chat_id=LOGS_CHANNEL_ID)
+    pass
+    # text = f'@{THIS_IS_BOT_NAME} is shutdown'
+    # await bot.send_message(text=text, chat_id=LOGS_CHANNEL_ID)
 
 
 async def get_stat(id_chat, id_user=None):
@@ -522,7 +523,12 @@ async def registration_command(callback_message):
 async def registration_process(message: Message, meaning='', its_callback=False):
     id_user = message.chat.id
 
-    cursor.execute('SELECT registration_field, message_id FROM users WHERE id_user = ?', (id_user,))
+    cursor.execute(
+        '''SELECT DISTINCT users.registration_field, users.message_id, projects.name, projects.invite_link FROM chats
+            INNER JOIN settings ON chats.id_chat = settings.id_chat
+            INNER JOIN users ON chats.id_user = users.id_user
+			INNER JOIN projects ON settings.project_id = projects.id	
+            WHERE settings.enable_group AND chats.id_user = ?''', (id_user,))
     result_tuple = cursor.fetchone()
 
     # if result_tuple is None or result_tuple[0] == '':
@@ -531,6 +537,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
 
     registration_field = result_tuple[0]
     message_id = result_tuple[1]
+    invite_link = result_tuple[3]
 
     new_registration_field = ''
     text = ''
@@ -601,7 +608,6 @@ async def registration_process(message: Message, meaning='', its_callback=False)
 
         new_registration_field = 'done'
 
-        invite_link = INVITE_LINK
         inline_kb = InlineKeyboardMarkup(row_width=1)
         inline_kb.add(InlineKeyboardButton('Заявка на вступление', url=invite_link))
         text = 'Шаг 7 из 7. \nУчебные материалы будут выкладываться в канал. Подайте заявку на вступление (будет принята автоматически).'

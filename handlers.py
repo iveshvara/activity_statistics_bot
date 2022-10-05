@@ -1,6 +1,6 @@
 
 from bot import bot, dp, cursor, connect
-from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, INVITE_LINK, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
+from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
     registration_process, registration_command, insert_or_update_chats
 from service import add_buttons_time_selection, shielding
@@ -159,9 +159,10 @@ async def gender_processing(callback: CallbackQuery):
 async def join(update: ChatJoinRequest):
     id_user = update.from_user.id
     cursor.execute(
-        '''SELECT DISTINCT users.message_id FROM chats
+        '''SELECT DISTINCT users.message_id, projects.name, projects.invite_link FROM chats
             INNER JOIN settings ON chats.id_chat = settings.id_chat
-            INNER JOIN users ON chats.id_user = users.id_user	
+            INNER JOIN users ON chats.id_user = users.id_user
+			INNER JOIN projects ON settings.project_id = projects.id	
             WHERE settings.enable_group AND chats.id_user = ?''', (id_user,))
     meaning = cursor.fetchone()
 
@@ -173,7 +174,7 @@ async def join(update: ChatJoinRequest):
     else:
         await update.approve()
         text = '''Все получилось! \nПоздравляем Вас с успешной регистрацией! \nВаша заявка подтверждена на вступление подтверждена, пожалуйста заходите.'''
-        inline_kb.add(InlineKeyboardButton('Зайти в канал.', url=INVITE_LINK))
+        inline_kb.add(InlineKeyboardButton('Зайти в канал.', url=meaning[2]))
         try:
             await bot.delete_message(chat_id=id_user, message_id=meaning[0])
         except Exception as e:
