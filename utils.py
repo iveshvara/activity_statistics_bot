@@ -613,8 +613,12 @@ async def registration_process(message: Message, meaning='', its_callback=False)
 
     query_text += f'message_id = {message.message_id}'
     query_text = f'''UPDATE users SET {query_text} WHERE id_user = {id_user}'''
-    cursor.execute(query_text)
-    connect.commit()
+    try:
+        cursor.execute(query_text)
+        connect.commit()
+    except Exception as e:
+        await bot.send_message(text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{query_text}\n\nError text:\n{str(e)}',
+                               chat_id=LOGS_CHANNEL_ID)
 
 
 async def process_parameter_input(callback: CallbackQuery, id_chat, parameter_name, parameter_value):
@@ -630,8 +634,11 @@ async def process_parameter_continuation(callback: CallbackQuery, id_chat, id_us
     cursor.execute(f'UPDATE settings SET {parameter_name} = ? WHERE id_chat = ?', (parameter_value, id_chat))
     connect.commit()
 
-    text, inline_kb = await setting_up_a_chat(id_chat, id_user)
-    await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    try:
+        text, inline_kb = await setting_up_a_chat(id_chat, id_user)
+        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    except Exception as e:
+        pass
 
 
 async def insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message):
@@ -652,6 +659,7 @@ async def insert_or_update_chats(id_chat, id_user, first_name, last_name, userna
             last_name = ?, username = ?, deleted = False, date_of_the_last_message = ? 
             WHERE id_chat = ? AND id_user = ?'''
         values = (characters, first_name, last_name, username, date_of_the_last_message, id_chat, id_user)
+
     try:
         cursor.execute(text, values)
         connect.commit()

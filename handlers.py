@@ -127,11 +127,14 @@ async def menu_back(callback: CallbackQuery):
     id_user = callback.from_user.id
     text, inline_kb, one_group = await get_start_menu(id_user)
 
-    if one_group is None:
-        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
-    else:
-        text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
-        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    try:
+        if one_group is None:
+            await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+        else:
+            text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
+            await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    except Exception as e:
+        pass
 
 
 @dp.callback_query_handler(text='reg')
@@ -298,7 +301,8 @@ async def message_handler(message):
 
                 cursor.execute(
                     '''SELECT projects.channel_id FROM settings 
-                    INNER JOIN projects ON settings.project_id = projects.id 
+                    INNER JOIN projects ON settings.project_id = projects.id
+                    AND NOT projects.channel_id = 0  
                     AND settings.id_chat = ?''', (id_chat,))
                 meaning = cursor.fetchone()
                 if meaning is not None:
