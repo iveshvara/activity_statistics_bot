@@ -12,85 +12,6 @@ import aioschedule
 
 
 async def on_startup(_):
-    connect.execute(
-        '''CREATE TABLE IF NOT EXISTS chats(
-            id_chat INTEGER, 
-            id_user INTEGER, 
-            first_name TEXT, 
-            last_name TEXT, 
-            username TEXT, 
-            characters INTEGER, 
-            messages INTEGER,
-            deleted BLOB, 
-            date_of_the_last_message TEXT,  
-            state TEXT, 
-            message_id INTEGER
-    )''')
-
-    connect.execute(
-        '''CREATE TABLE IF NOT EXISTS meetings(id_chat INTEGER, id_user INTEGER, day TEXT,
-        _00 BLOB, _01 BLOB, _02 BLOB, _03 BLOB, _04 BLOB, _05 BLOB, _06 BLOB, _07 BLOB, _08 BLOB, _09 BLOB, 
-        _10 BLOB, _11 BLOB, _12 BLOB, _13 BLOB, _14 BLOB, _15 BLOB, _16 BLOB, _17 BLOB, _18 BLOB, _19 BLOB, 
-        _20 BLOB, _21 BLOB, _22 BLOB, _23 BLOB)''')
-
-    connect.execute(
-        '''CREATE TABLE IF NOT EXISTS messages(
-            id_chat INTEGER, 
-            id_user INTEGER, 
-            date TEXT, 
-            characters INTEGER, 
-            message_id INTEGER
-    )''')
-
-    connect.execute(
-        '''CREATE TABLE IF NOT EXISTS projects(
-            id INTEGER,
-            name TEXT,
-            channel_id INTEGER,
-            show BLOB
-    )''')
-
-    connect.execute(
-        '''CREATE TABLE IF NOT EXISTS settings(
-            id_chat INTEGER, 
-            title TEXT, 
-            statistics_for_everyone BLOB, 
-            include_admins_in_statistics BLOB, 
-            sort_by_messages BLOB, 
-            do_not_output_the_number_of_messages BLOB, 
-            do_not_output_the_number_of_characters BLOB, 
-            period_of_activity INTEGER, 
-            report_enabled BLOB, 
-            project_id INTEGER, 
-            report_time TEXT, 
-            enable_group BLOB, 
-            last_notify_date TEXT, 
-            last_notify_message_id_date INTEGER, 
-            channel INTEGER, 
-            check_channel_subscription BLOB
-    )''')
-
-    connect.execute(
-        '''CREATE TABLE IF NOT EXISTS users(
-            id_user INTEGER, 
-            first_name TEXT, 
-            last_name TEXT,
-            username TEXT, 
-            language_code BLOB, 
-            registration_date TEXT, 
-            registration_field TEXT, 
-            message_id INTEGER, 
-            gender TEXT, 
-            FIO TEXT, 
-            birthdate TEXT, 
-            address TEXT, 
-            tel TEXT, 
-            mail TEXT, 
-            projects TEXT
-    )''')
-
-    connect.commit()
-
     # dp.middleware.setup(LoggingMiddleware())
 
     asyncio.create_task(scheduler())
@@ -184,9 +105,9 @@ async def run_reminder():
 
 
 async def on_shutdown(_):
-    pass
-    # text = f'@{THIS_IS_BOT_NAME} is shutdown'
-    # await bot.send_message(text=text, chat_id=LOGS_CHANNEL_ID)
+    # pass
+    text = f'@{THIS_IS_BOT_NAME} is shutdown'
+    await bot.send_message(text=text, chat_id=LOGS_CHANNEL_ID)
 
 
 async def get_stat(id_chat, id_user=None):
