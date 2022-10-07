@@ -2,7 +2,7 @@
 from bot import bot, dp, cursor, connect
 from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
-    registration_process, registration_command, insert_or_update_chats
+    registration_process, registration_command, insert_or_update_chats, callback_edit_text, message_answer
 from service import add_buttons_time_selection, shielding
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
@@ -18,10 +18,10 @@ async def command_start(message: Message):
         text, inline_kb, one_group = await get_start_menu(id_user)
 
         if one_group is None:
-            await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, protect_content=False)
+            await message_answer(message, text, inline_kb)
         else:
             text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
-            await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, protect_content=False)
+            await message_answer(message, text, inline_kb)
 
 
 @dp.message_handler(commands=['get_stat'])
@@ -45,9 +45,11 @@ async def command_get_stat(message: Message):
 
     if not text == '':
         try:
-            await message.answer(text, parse_mode='MarkdownV2', disable_notification=True)
+            await message_answer(message, text)
         except Exception as e:
-            print(f'id_chat: {id_chat}, id_user: {id_user}, text: {text}')
+            text = f'id_chat: {id_chat}, id_user: {id_user}, text: {text}'
+            await bot.send_message(
+                text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}', chat_id=LOGS_CHANNEL_ID)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('id_chat '))
@@ -55,7 +57,7 @@ async def choosing_a_chat_to_set_up(callback: CallbackQuery):
     id_chat = int(callback.data.replace('id_chat ', ''))
     id_user = callback.from_user.id
     text, inline_kb = await setting_up_a_chat(id_chat, id_user)
-    await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    await callback_edit_text(callback, text, inline_kb)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('settings '))
@@ -92,7 +94,7 @@ async def process_parameter(callback: CallbackQuery):
     #     inline_kb = InlineKeyboardMarkup(row_width=1)
     #     inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
     #     text = shielding('Пришлите пригласительную ссылку на канал, где вы будете публиковать закрытые учебные материалы в виде https://t.me/+SAqGflBSoqpYv2W4')
-    #     await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    #     await await callback_edit_text(callback, text, inline_kb)
     elif parameter_name == 'project_name':
         text = shielding('Выберете ваш проект:')
         cursor.execute('SELECT id, name FROM projects')
@@ -104,14 +106,14 @@ async def process_parameter(callback: CallbackQuery):
 
         inline_kb.add(InlineKeyboardButton(text='Нет проекта', callback_data='settings ' + str(id_chat) + ' project_id 0'))
 
-        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+        await callback_edit_text(callback, text, inline_kb)
 
     elif parameter_name == 'project_id':
         cursor.execute('UPDATE settings SET project_id = ? WHERE id_chat = ?', (parameter_value, id_chat))
         connect.commit()
         text, inline_kb = await setting_up_a_chat(id_chat, id_user)
 
-        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+        await callback_edit_text(callback, text, inline_kb)
     else:
         # parameter_value = not parameter_value
         if parameter_value == '0':
@@ -127,14 +129,11 @@ async def menu_back(callback: CallbackQuery):
     id_user = callback.from_user.id
     text, inline_kb, one_group = await get_start_menu(id_user)
 
-    try:
-        if one_group is None:
-            await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
-        else:
-            text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
-            await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
-    except Exception as e:
-        pass
+    if one_group is None:
+        await callback_edit_text(callback, text, inline_kb)
+    else:
+        text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
+        await callback_edit_text(callback, text, inline_kb)
 
 
 @dp.callback_query_handler(text='reg')
@@ -411,10 +410,10 @@ async def command_call_meeting(message: Message):
         text += f'{count_messages}\. [{name_user}](tg://user?id={i[1]})\. \n'
 
     inline_kb = add_buttons_time_selection(0)
-    await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    await message_answer(message, text, inline_kb)
 
     inline_kb = add_buttons_time_selection(12)
-    await message.answer('/', parse_mode='MarkdownV2', reply_markup=inline_kb)
+    await message_answer(message, '/', inline_kb)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('call_meeting '))
@@ -466,13 +465,13 @@ async def handle_location(message: Message):
     cursor.execute(f'''UPDATE users SET tel = '{tel}' WHERE id_user = {id_user}''')
     connect.commit()
 
-    await message.answer('ok', parse_mode='MarkdownV2', reply_markup=ReplyKeyboardRemove(), disable_web_page_preview=True)
+    await message_answer(message, 'ok', ReplyKeyboardRemove())
 
     text = 'Выберете, в каких проектах вы уже обучались:'
     text = shielding(text)
     inline_kb = InlineKeyboardMarkup(row_width=1)
 
-    await message.answer(text, parse_mode='MarkdownV2', reply_markup=inline_kb, disable_web_page_preview=True)
+    await message_answer(message, text, inline_kb)
 
 
 @dp.message_handler(content_types=['location'])
@@ -534,7 +533,7 @@ async def handle_location(message: Message):
     keyboard = ReplyKeyboardMarkup()
     keyboard.add(KeyboardButton('Отправьте ваш номер телефона.', request_contact=True))
 
-    await message.answer(text, parse_mode='MarkdownV2', reply_markup=keyboard, disable_web_page_preview=True)
+    await message_answer(message, text, keyboard)
 
 
 @dp.channel_post_handler()

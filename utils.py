@@ -105,9 +105,7 @@ async def run_reminder():
 
 
 async def on_shutdown(_):
-    # pass
-    text = f'@{THIS_IS_BOT_NAME} is shutdown'
-    await bot.send_message(text=text, chat_id=LOGS_CHANNEL_ID)
+    pass
 
 
 async def get_stat(id_chat, id_user=None):
@@ -627,18 +625,15 @@ async def process_parameter_input(callback: CallbackQuery, id_chat, parameter_na
 
     text = f'Текущее значение параметра {parameter_name} = "{parameter_value}". Введите новое значение:'
     text = shielding(text)
-    await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
+    await callback_edit_text(callback, text, inline_kb)
 
 
 async def process_parameter_continuation(callback: CallbackQuery, id_chat, id_user, parameter_name, parameter_value):
     cursor.execute(f'UPDATE settings SET {parameter_name} = ? WHERE id_chat = ?', (parameter_value, id_chat))
     connect.commit()
 
-    try:
-        text, inline_kb = await setting_up_a_chat(id_chat, id_user)
-        await callback.message.edit_text(text, parse_mode='MarkdownV2', reply_markup=inline_kb)
-    except Exception as e:
-        pass
+    text, inline_kb = await setting_up_a_chat(id_chat, id_user)
+    await callback_edit_text(callback, text, inline_kb)
 
 
 async def insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message):
@@ -666,3 +661,33 @@ async def insert_or_update_chats(id_chat, id_user, first_name, last_name, userna
     except Exception as e:
         await bot.send_message(text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}',
                                chat_id=LOGS_CHANNEL_ID)
+
+
+async def callback_edit_text(callback: CallbackQuery, text, inline_kb):
+    try:
+        await callback.message.edit_text(
+            text,
+            parse_mode='MarkdownV2',
+            reply_markup=inline_kb,
+            disable_web_page_preview=True)
+    except Exception as e:
+        await bot.send_message(
+            text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}', chat_id=LOGS_CHANNEL_ID)
+
+
+async def message_answer(message: Message, text, inline_kb=None):
+    if inline_kb is None:
+        inline_kb = InlineKeyboardMarkup(row_width=1)
+
+    try:
+        await message.answer(
+            text,
+            parse_mode='MarkdownV2',
+            reply_markup=inline_kb,
+            disable_web_page_preview=True,
+            disable_notification=False,
+            protect_content=False)
+
+    except Exception as e:
+        await bot.send_message(
+            text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}', chat_id=LOGS_CHANNEL_ID)
