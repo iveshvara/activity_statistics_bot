@@ -295,26 +295,31 @@ async def get_stat(id_chat, id_user=None):
 async def get_start_menu(id_user):
     this_is_super_admin = id_user == SUPER_ADMIN_ID
     # this_is_super_admin = False
-    if this_is_super_admin:
-        piece = ''
-    else:
-        piece = f' AND id_user = {id_user}'
-    cursor.execute('''SELECT DISTINCT settings.id_chat, settings.title, settings.project_id FROM settings
-                        LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat WHERE settings.enable_group''' + piece)
+    # if this_is_super_admin:
+    #     piece = ''
+    # else:
+    # piece = f' AND id_user = {id_user}'
+    # cursor.execute('''SELECT DISTINCT settings.id_chat, settings.title, settings.project_id FROM settings
+    #                     LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat WHERE settings.enable_group''' + piece)
+
+    cursor.execute(
+        '''SELECT DISTINCT settings.id_chat, settings.title, settings.project_id FROM settings
+            LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat 
+            WHERE settings.enable_group AND id_user = ?''', (id_user,))
     meaning = cursor.fetchall()
     user_groups = []
     channel_enabled = False
     for i in meaning:
         get = False
-        if this_is_super_admin:
-            get = True
-        else:
-            try:
-                # get_chat_administrators - problems
-                member = await bot.get_chat_member(i[0], id_user)
-                get = member.is_chat_admin()
-            except Exception as e:
-                pass
+        # if this_is_super_admin:
+        #     get = True
+        # else:
+        try:
+            # get_chat_administrators - problems
+            member = await bot.get_chat_member(i[0], id_user)
+            get = member.is_chat_admin()
+        except Exception as e:
+            pass
 
         if get:
             title_result = i[1].replace('\\', '')
@@ -350,10 +355,13 @@ async def get_start_menu(id_user):
         for i in user_groups:
             inline_kb.add(InlineKeyboardButton(text=i[1], callback_data=f'id_chat {i[0]}'))
 
+    if this_is_super_admin:
+        inline_kb.add(InlineKeyboardButton(text='super admin functions', callback_data='super_admin '))
+
     return text, inline_kb, one_group
 
 
-async def setting_up_a_chat(id_chat, id_user, back_button=True):
+async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=False):
     cursor.execute(
         '''SELECT 
             settings.statistics_for_everyone,
@@ -398,6 +406,9 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True):
 
     if back_button:
         inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
+
+    if super_admin:
+        inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='super_admin '))
 
     text = await get_stat(id_chat, id_user)
     #group_name = shielding(meaning[1])

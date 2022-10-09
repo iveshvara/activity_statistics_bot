@@ -157,6 +157,53 @@ async def gender_processing(callback: CallbackQuery):
     await registration_process(callback.message, value, True)
 
 
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('super_admin '))
+async def choosing_a_chat_to_set_up(callback: CallbackQuery):
+    id_user = callback.from_user.id
+    list_str = callback.data.split()
+    project_id = ''
+    if len(list_str) > 1:
+        project_id = int(list_str[1])
+    id_chat = ''
+    if len(list_str) > 2:
+        id_chat = int(list_str[2])
+
+    if project_id == '' and id_chat == '':
+        text = shielding('Выберете ваш проект:')
+        cursor.execute('SELECT id, name FROM projects')
+        projects_tuple = cursor.fetchall()
+
+        inline_kb = InlineKeyboardMarkup(row_width=1)
+        for i in projects_tuple:
+            inline_kb.add(
+                InlineKeyboardButton(text=i[1], callback_data='super_admin ' + str(i[0])))
+
+        inline_kb.add(InlineKeyboardButton(text='Нет проекта', callback_data='super_admin 0'))
+        inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
+
+        await callback_edit_text(callback, text, inline_kb)
+
+    elif id_chat == '':
+        inline_kb = InlineKeyboardMarkup(row_width=1)
+        cursor.execute(
+            '''SELECT DISTINCT settings.id_chat, settings.title FROM settings
+            LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat 
+            WHERE settings.enable_group AND project_id = ?''', (project_id,))
+        meaning = cursor.fetchall()
+        for i in meaning:
+            title_result = i[1].replace('\\', '')
+            inline_kb.add(InlineKeyboardButton(text=title_result, callback_data=f'super_admin {project_id} {i[0]}'))
+        inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='super_admin '))
+
+        text = 'Выберете группу для настройки:'
+        await callback_edit_text(callback, text, inline_kb)
+
+    else:
+        id_user = callback.from_user.id
+        text, inline_kb = await setting_up_a_chat(id_chat, id_user, False, True)
+        await callback_edit_text(callback, text, inline_kb)
+
+
 @dp.chat_join_request_handler()
 async def join(update: ChatJoinRequest):
     id_user = update.from_user.id
