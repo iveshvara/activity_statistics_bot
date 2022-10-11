@@ -92,8 +92,11 @@ async def get_projects_cb(projects):
     return inline_kb
 
 
-async def get_name_tg(id_user, first_name, last_name, username):
-    name_user = shielding(first_name + ' ' + last_name).strip()
+async def get_name_tg(id_user, first_name, last_name, username, FIO=None):
+    if FIO is None or FIO.split() == '' or len(FIO) < 5:
+        name_user = shielding(first_name + ' ' + last_name).strip()
+    else:
+        name_user = shielding(FIO).strip()
     # if use_username and not i_username == '':
     #     # user = '@' + i_username
     #     user = f'[{name_user}](http://t.me/{i_username})'
@@ -106,3 +109,26 @@ async def get_name_tg(id_user, first_name, last_name, username):
 
     return user
 
+
+def reduce_large_numbers(number):
+    # if number <= 10000:
+    #     text_result = str(number)
+    # else:
+    short_number = round(number/1000, 1)
+    short_number_integer = str(round(short_number // 1))
+    short_number_fractional = str(round(short_number % 1))
+    text_result = short_number_integer + '\.' + short_number_fractional + 'K'
+
+    return text_result
+
+
+def align_by_number_of_characters(number, number_of_characters):
+    text_result = str(number)
+    if len(text_result) >= number_of_characters:
+        return text_result
+
+    cycle_length = number_of_characters - len(text_result)
+    for i in range(cycle_length):
+        text_result = ' ' + text_result
+
+    return text_result

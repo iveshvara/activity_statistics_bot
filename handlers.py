@@ -70,9 +70,7 @@ async def process_parameter(callback: CallbackQuery):
     if len(list_str) > 3:
         parameter_value = list_str[3]
 
-    # no_blob_parameters = ['period_of_activity', 'report_time']
-    # if parameter_name in no_blob_parameters:
-    #     await process_parameter_input(callback, id_chat, parameter_name, parameter_value)
+
     if parameter_name == 'period_of_activity':
         parameter_value_int = int(parameter_value)
         adding = 0
@@ -88,13 +86,7 @@ async def process_parameter(callback: CallbackQuery):
             parameter_value_int = 1
         parameter_value_int += adding
         await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value_int)
-    # if parameter_name == 'channel':
-    #     cursor.execute(f'UPDATE chats SET state = "channel", message_id = {callback.message.message_id} WHERE id_user = {id_user} AND id_chat = {id_chat}')
-    #     connect.commit()
-    #     inline_kb = InlineKeyboardMarkup(row_width=1)
-    #     inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
-    #     text = shielding('Пришлите пригласительную ссылку на канал, где вы будете публиковать закрытые учебные материалы в виде https://t.me/+SAqGflBSoqpYv2W4')
-    #     await await callback_edit_text(callback, text, inline_kb)
+
     elif parameter_name == 'project_name':
         text = shielding('Выберете ваш проект:')
         cursor.execute('SELECT id, name FROM projects')
@@ -238,22 +230,6 @@ async def message_handler(message):
     if message.chat.type == 'private':
         if not message.content_type == 'text':
             return
-        # id_user = message.from_user.id
-        # cursor.execute(f'SELECT id_chat, message_id FROM chats WHERE id_user = {id_user} AND state = "channel"')
-        # result = cursor.fetchone()
-        # if result is None:
-        #     return
-        # id_chat = result[0]
-        # message_id = result[1]
-        #
-        # cursor.execute(f'''UPDATE settings SET channel = '{message.text}' WHERE id_chat = {id_chat}''')
-        # cursor.execute(f'UPDATE chats SET state = "", message_id = 0 WHERE id_user = {id_user} AND id_chat = {id_chat}')
-        # connect.commit()
-        #
-        # await message.delete()
-        #
-        # text, inline_kb = await setting_up_a_chat(id_chat, id_user)
-        # await bot.edit_message_text(text=text, chat_id=id_user, message_id=message_id, reply_markup=inline_kb, parse_mode='MarkdownV2')
 
         await registration_process(message, message.text, False)
 
@@ -276,9 +252,10 @@ async def message_handler(message):
                 '''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
                 sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
                 period_of_activity, report_enabled, project_id, report_time, enable_group, 
-                last_notify_date, last_notify_message_id_date, channel, check_channel_subscription) 
+                last_notify_date, last_notify_message_id_date, 
+                do_not_оutput_name_from_registration, check_channel_subscription) 
                 VALUES (?, ?, False, False, False, False, False, 7, False, 0, "00:00", True, 
-                datetime("now"), datetime("now"), 0, False)''', (id_chat, title))
+                datetime("now"), datetime("now"), False, False)''', (id_chat, title))
             connect.commit()
 
             return
@@ -313,9 +290,10 @@ async def message_handler(message):
                                 '''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
                                 sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
                                 period_of_activity, report_enabled, project_id, report_time, enable_group, 
-                                last_notify_date, last_notify_message_id_date, channel, check_channel_subscription) 
+                                last_notify_date, last_notify_message_id_date, 
+                                do_not_оutput_name_from_registration, check_channel_subscription) 
                                 VALUES (?, ?, False, False, False, False, False, 7, False, 0, "00:00", True, 
-                                datetime("now"), datetime("now"), 0, False)''', (id_chat, title))
+                                datetime("now"), datetime("now"), False, False)''', (id_chat, title))
                         else:
                             cursor.execute('UPDATE settings SET enable_group = True, title = ? WHERE id_chat = ?',
                                            (title, id_chat))

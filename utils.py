@@ -1,7 +1,7 @@
 
 from bot import bot, cursor, connect, dp
-from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID
-from service import its_admin, shielding, get_name_tg, convert_bool
+from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID, SKIP_ERROR_TEXT
+from service import its_admin, shielding, get_name_tg, convert_bool, reduce_large_numbers, align_by_number_of_characters
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
@@ -131,7 +131,8 @@ async def get_stat(id_chat, id_user=None):
             settings.do_not_output_the_number_of_messages, 
             settings.do_not_output_the_number_of_characters, 
             settings.check_channel_subscription, 
-            IFNULL(projects.channel_id, 0) 
+            IFNULL(projects.channel_id, 0),
+            settings.do_not_оutput_name_from_registration
         FROM settings 
         LEFT OUTER JOIN projects 
                 ON settings.project_id = projects.id
@@ -146,10 +147,9 @@ async def get_stat(id_chat, id_user=None):
         do_not_output_the_number_of_characters = meaning[5]
         check_channel_subscription = meaning[6]
         channel_id = meaning[7]
+        do_not_оutput_name_from_registration = meaning[8]
 
-    if statistics_for_everyone or its_admin(id_user, chat_admins) or id_user == None:
-        text = '*Активные участники:*\n'
-
+    if statistics_for_everyone or its_admin(id_user, chat_admins) or id_user is None:
         if sort_by_messages:
             sort = 'messages'
         else:
@@ -157,39 +157,46 @@ async def get_stat(id_chat, id_user=None):
 
         count_messages = 0
         cursor.execute(
-            f'''SELECT chats.id_user, chats.first_name, chats.last_name, chats.username, 
+            f'''SELECT chats.id_user, chats.first_name, chats.last_name, chats.username, users.FIO,
             SUM(IFNULL(messages.characters, 0)) AS characters, COUNT(messages.characters) AS messages, 
             chats.deleted, chats.date_of_the_last_message, 
                 CASE WHEN NOT chats.deleted AND ? > ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) THEN 0 
-                ELSE ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) END AS inactive_days,
-                (SELECT COUNT(DISTINCT message_id) FROM messages 
-                    WHERE chats.id_chat = messages.id_chat 
-                        AND messages.message_id IS NOT NULL 
-                        AND NOT messages.message_id = 0 
-                        AND 7 > ROUND(julianday("now") - julianday(date), 0)
-                ) AS requests,
-                (SELECT COUNT(DISTINCT messages_two.message_id) FROM messages AS messages_one 
-                    INNER JOIN messages AS messages_two 
-                    ON messages_one.id_chat = messages_two.id_chat 
-                        AND messages_one.message_id = messages_two.message_id 
-                        AND chats.id_user = messages_two.id_user
-                    WHERE chats.id_chat = messages_one.id_chat 
-                        AND messages_one.message_id IS NOT NULL 
-                        AND NOT messages_one.message_id = 0 
-                        AND 7 > ROUND(julianday("now") - julianday(messages_one.date), 0)
-                ) AS response 
+                ELSE ROUND(julianday("now") - julianday(chats.date_of_the_last_message), 0) END AS inactive_days
+                -- ,(SELECT COUNT(DISTINCT message_id) FROM messages 
+                --    WHERE chats.id_chat = messages.id_chat 
+                --        AND messages.message_id IS NOT NULL 
+                --        AND NOT messages.message_id = 0 
+                --        AND 7 > ROUND(julianday("now") - julianday(date), 0)
+                --) AS requests,
+                --(SELECT COUNT(DISTINCT messages_two.message_id) FROM messages AS messages_one 
+                --    INNER JOIN messages AS messages_two 
+                --    ON messages_one.id_chat = messages_two.id_chat 
+                --        AND messages_one.message_id = messages_two.message_id 
+                --        AND chats.id_user = messages_two.id_user
+                --    WHERE chats.id_chat = messages_one.id_chat 
+                --        AND messages_one.message_id IS NOT NULL 
+                --        AND NOT messages_one.message_id = 0 
+                --        AND 7 > ROUND(julianday("now") - julianday(messages_one.date), 0)
+                --) AS response 
             FROM chats 
             LEFT JOIN messages 
                 ON chats.id_chat = messages.id_chat 
                     AND chats.id_user = messages.id_user 
-                    AND ? > ROUND(julianday("now") - julianday(messages.date), 0) 
+                    AND ? > ROUND(julianday("now") - julianday(messages.date), 0)
+            LEFT JOIN users 
+                ON chats.id_user = users.id_user  
             WHERE chats.id_chat = ? 
             GROUP BY chats.id_chat, chats.id_user, chats.first_name, chats.last_name, chats.username, chats.date_of_the_last_message, chats.deleted 
-            ORDER BY deleted ASC, inactive_days ASC, ? DESC ''', (period_of_activity, period_of_activity, id_chat, sort)
+            ORDER BY deleted ASC, inactive_days ASC, {sort} DESC ''', (period_of_activity, period_of_activity, id_chat)
         )
         meaning = cursor.fetchall()
+        row_count = len(meaning)
+        row_count = int(len(str(row_count)))
 
-        requests = None
+        # text = '`' + align_by_number_of_characters('N', row_count) + ' |  ✉ |    🖋️`'
+        text = '*N\. Пользователь: `Сообщений/Символов`*\n'
+
+        # requests = None
         active_members_inscription_is_shown = False
         deleted_members_inscription_is_shown = False
         for i in meaning:
@@ -197,14 +204,18 @@ async def get_stat(id_chat, id_user=None):
             i_first_name = i[1]
             i_last_name = i[2]
             i_username = i[3]
-            i_characters = i[4]
-            i_messages = i[5]
-            i_deleted = i[6]
-            i_date_of_the_last_message = i[7]
-            i_inactive_days = i[8]
-            if requests is None:
-                requests = i[9]
-            i_response = i[10]
+            if do_not_оutput_name_from_registration:
+                i_FIO = ''
+            else:
+                i_FIO = i[4]
+            i_characters = reduce_large_numbers(i[5])
+            i_messages = i[6]
+            i_deleted = i[7]
+            i_date_of_the_last_message = i[8]
+            i_inactive_days = i[9]
+            # if requests is None:
+            #     requests = i[10]
+            # i_response = i[11]
 
             if not include_admins_in_statistics:
                 if its_admin(i_id_user, chat_admins):
@@ -239,16 +250,16 @@ async def get_stat(id_chat, id_user=None):
                 if member_status:
                     channel_subscription = ''
                 else:
-                    channel_subscription = 'Не подписан на канал\. \n     — '
-
-            if not do_not_output_the_number_of_messages:
-                messages = f'сообщений: {i_messages}'
+                    channel_subscription = '⚠️ ' # 'Не подписан на канал\. \n     — '
 
             if not do_not_output_the_number_of_characters:
-                characters = f'символов: {i_characters}'
+                characters = str(i_characters) # символов 💬 🖌
 
-            if requests > 0:
-                response = f'откликов: {i_response} из {requests}'
+            if not do_not_output_the_number_of_messages:
+                messages = str(i_messages)  # сообщений 📃
+
+            # if requests > 0:
+            #     response = f'откликов: {i_response} из {requests}'
 
             inactive = ''
             if i_deleted:
@@ -257,31 +268,11 @@ async def get_stat(id_chat, id_user=None):
             elif i_inactive_days > 0:
                 inactive = f' \(неактивен дней: {int(i_inactive_days)}\)'
             else:
-                if check_channel_subscription:
-                    specifics += channel_subscription
+                specifics += ': `' + messages + '/' + characters + '`'
 
-                if sort_by_messages:
-                    specifics += messages
-                    if not characters == '' and not specifics == '':
-                        specifics += ', '
-                    specifics += characters
-                else:
-                    specifics += characters
-                    if not messages == '' and not specifics == '':
-                        specifics += ', '
-                    specifics += messages
-
-                if not specifics == '':
-                    if response == '':
-                        specifics += '\.'
-                    else:
-                        specifics += ', ' + response + '\.'
-                    specifics = ':\n     — ' + specifics + ''
-
-                specifics += '\n'
-
-            user = await get_name_tg(i_id_user, i_first_name, i_last_name, i_username)
-            text += f'\n*{count_messages}*\. {user}{inactive}{specifics}'
+            user = await get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_FIO)
+            count_messages_text = str(count_messages)
+            text += f'\n{count_messages_text}\. {channel_subscription}{user}{specifics}{inactive}'
 
         if text == '*Активные участники:*\n':
             text = 'Нет статистики для отображения\.'
@@ -295,12 +286,6 @@ async def get_stat(id_chat, id_user=None):
 async def get_start_menu(id_user):
     this_is_super_admin = id_user == SUPER_ADMIN_ID
     # this_is_super_admin = False
-    # if this_is_super_admin:
-    #     piece = ''
-    # else:
-    # piece = f' AND id_user = {id_user}'
-    # cursor.execute('''SELECT DISTINCT settings.id_chat, settings.title, settings.project_id FROM settings
-    #                     LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat WHERE settings.enable_group''' + piece)
 
     cursor.execute(
         '''SELECT DISTINCT settings.id_chat, settings.title, settings.project_id FROM settings
@@ -311,9 +296,6 @@ async def get_start_menu(id_user):
     channel_enabled = False
     for i in meaning:
         get = False
-        # if this_is_super_admin:
-        #     get = True
-        # else:
         try:
             # get_chat_administrators - problems
             member = await bot.get_chat_member(i[0], id_user)
@@ -372,7 +354,8 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
             settings.period_of_activity,
             settings.report_enabled,
             IFNULL(projects.name, ''),
-            settings.check_channel_subscription,
+            settings.do_not_оutput_name_from_registration,
+	        settings.check_channel_subscription,
 	        settings.title	
         FROM settings 
             LEFT OUTER JOIN projects 
@@ -401,8 +384,19 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
     inline_kb.add(InlineKeyboardButton(text='Статистика за период (дней): ' + str(meaning[5]), callback_data=f'settings {id_chat} period_of_activity {meaning[5]}'))
     inline_kb.add(InlineKeyboardButton(text='Автоматический отчет в чат: ' + convert_bool(meaning[6]), callback_data=f'settings {id_chat} report_enabled {meaning[6]}'))
     inline_kb.add(InlineKeyboardButton(text='Проект: ' + meaning[7], callback_data=f'settings {id_chat} project_name'))
-    inline_kb.add(InlineKeyboardButton(text='Проверять подписку на канал: ' + convert_bool(meaning[8]), callback_data=f'settings {id_chat} check_channel_subscription {meaning[8]}'))
-    # inline_kb.add(InlineKeyboardButton(text='Ссылка на канал: ' + meaning[14], callback_data=f'settings {id_chat} channel {meaning[14]}'))
+    if meaning[8]:
+        inline_kb.add(InlineKeyboardButton(text='Имя и фамилия пользователя', callback_data=f'settings {id_chat} do_not_оutput_name_from_registration {meaning[8]}'))
+    else:
+        inline_kb.add(InlineKeyboardButton(text='Имя и фамилия из регистрации', callback_data=f'settings {id_chat} do_not_оutput_name_from_registration {meaning[8]}'))
+
+    check_channel_subscription = meaning[9]
+    check_channel_subscription_on = ''
+    if check_channel_subscription:
+        check_channel_subscription_on = ' ⚠️'
+    inline_kb.add(InlineKeyboardButton(
+        text='Проверять подписку на канал️: ' + convert_bool(meaning[9]) + check_channel_subscription_on,
+        callback_data=f'settings {id_chat} check_channel_subscription {meaning[9]}'))
+
 
     if back_button:
         inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
@@ -411,8 +405,8 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
         inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='super_admin '))
 
     text = await get_stat(id_chat, id_user)
-    #group_name = shielding(meaning[1])
-    group_name = meaning[9]
+
+    group_name = meaning[10]
     return '*Группа "' + group_name + '"\.*\n\n' + text, inline_kb
 
 
@@ -674,6 +668,18 @@ async def insert_or_update_chats(id_chat, id_user, first_name, last_name, userna
                                chat_id=LOGS_CHANNEL_ID)
 
 
+async def send_error(text, error_text):
+    if error_text == SKIP_ERROR_TEXT:
+        return
+    text_message = f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{error_text}'
+    length_message = len(text_message)
+    if length_message > 4096:
+        crop_characters = length_message - 4096 - 5
+        text_message = f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text[crop_characters]} \<\.\.\.\>\n\nError text:\n{error_text}'
+
+    await bot.send_message(text=text_message, chat_id=LOGS_CHANNEL_ID)
+
+
 async def callback_edit_text(callback: CallbackQuery, text, inline_kb):
     try:
         await callback.message.edit_text(
@@ -682,8 +688,7 @@ async def callback_edit_text(callback: CallbackQuery, text, inline_kb):
             reply_markup=inline_kb,
             disable_web_page_preview=True)
     except Exception as e:
-        await bot.send_message(
-            text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}', chat_id=LOGS_CHANNEL_ID)
+        await send_error(text, str(e))
 
 
 async def message_answer(message: Message, text, inline_kb=None):
@@ -700,5 +705,4 @@ async def message_answer(message: Message, text, inline_kb=None):
             protect_content=False)
 
     except Exception as e:
-        await bot.send_message(
-            text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}', chat_id=LOGS_CHANNEL_ID)
+        await send_error(text, str(e))
