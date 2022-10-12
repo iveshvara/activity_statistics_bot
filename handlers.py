@@ -477,7 +477,7 @@ async def command_call_meeting(message: Message):
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('call_meeting '))
-async def call_meeting_procces(callback: CallbackQuery):
+async def call_meeting_process(callback: CallbackQuery):
     id_chat = callback.message.chat.id
     id_user = callback.from_user.id
 

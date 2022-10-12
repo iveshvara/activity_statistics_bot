@@ -1,10 +1,10 @@
 
 from bot import bot, cursor, connect, dp
 from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID, SKIP_ERROR_TEXT
-from service import its_admin, shielding, get_name_tg, convert_bool, reduce_large_numbers, align_by_number_of_characters
+from service import its_admin, shielding, get_name_tg, convert_bool, reduce_large_numbers
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.contrib.middlewares.logging import LoggingMiddleware
+# from aiogram.contrib.middlewares.logging import LoggingMiddleware
 
 from datetime import datetime
 import asyncio
@@ -27,7 +27,9 @@ async def scheduler():
 
 
 async def run_reminder():
-    cursor.execute('SELECT * FROM settings WHERE strftime("%w", date("now")) = "1" AND date("now") > date(last_notify_date) AND report_enabled AND enable_group')
+    cursor.execute(
+        '''SELECT * FROM settings WHERE strftime("%w", date("now")) = "1" 
+        AND date("now") > date(last_notify_date) AND report_enabled AND enable_group''')
     result_tuple = cursor.fetchall()
     for i in result_tuple:
         id_chat = i[0]
@@ -72,14 +74,14 @@ async def run_reminder():
     )
     result_tuple = cursor.fetchall()
     last_id_chat = None
-    tuple = []
+    id_chat_text_tuple = []
     for i in result_tuple:
         id_chat = i[0]
         if not last_id_chat == id_chat:
             if last_id_chat is None:
                 last_id_chat = id_chat
             else:
-                tuple.append((last_id_chat, text))
+                id_chat_text_tuple.append((last_id_chat, text))
                 text = ''
                 last_id_chat = id_chat
 
@@ -90,9 +92,9 @@ async def run_reminder():
         text += await get_name_tg(id_user, first_name, last_name, username)
     else:
         if last_id_chat is not None:
-            tuple.append([last_id_chat, text])
+            id_chat_text_tuple.append([last_id_chat, text])
 
-    for i in tuple:
+    for i in id_chat_text_tuple:
         id_chat = i[0]
         text = i[1]
         text = 'Сегодня не откликнулись на запрос\: \n' + text + '\n \#ВажноеСообщение'
@@ -121,6 +123,7 @@ async def get_stat(id_chat, id_user=None):
     do_not_output_the_number_of_characters = False
     check_channel_subscription = False
     channel_id = 0
+    do_not_output_name_from_registration = False
 
     cursor.execute(
         '''SELECT 
@@ -132,7 +135,7 @@ async def get_stat(id_chat, id_user=None):
             settings.do_not_output_the_number_of_characters, 
             settings.check_channel_subscription, 
             IFNULL(projects.channel_id, 0),
-            settings.do_not_оutput_name_from_registration
+            settings.do_not_output_name_from_registration
         FROM settings 
         LEFT OUTER JOIN projects 
                 ON settings.project_id = projects.project_id
@@ -147,7 +150,7 @@ async def get_stat(id_chat, id_user=None):
         do_not_output_the_number_of_characters = meaning[5]
         check_channel_subscription = meaning[6]
         channel_id = meaning[7]
-        do_not_оutput_name_from_registration = meaning[8]
+        do_not_output_name_from_registration = meaning[8]
 
     if statistics_for_everyone or its_admin(id_user, chat_admins) or id_user is None:
         if sort_by_messages:
@@ -204,7 +207,7 @@ async def get_stat(id_chat, id_user=None):
             i_first_name = i[1]
             i_last_name = i[2]
             i_username = i[3]
-            if do_not_оutput_name_from_registration:
+            if do_not_output_name_from_registration:
                 i_FIO = ''
             else:
                 i_FIO = i[4]
@@ -340,10 +343,10 @@ async def get_start_menu(id_user):
         WHERE project_administrators.id_user = ?''', (id_user,))
     meaning = cursor.fetchone()
     if meaning is not None:
-        inline_kb.add(InlineKeyboardButton(text='Рассылка по "' + meaning[1] + '"', callback_data='project_admin ' + str(meaning[0])))
+        inline_kb.add(InlineKeyboardButton(text='[Рассылка по "' + meaning[1] + '"]', callback_data='project_admin ' + str(meaning[0])))
 
     if id_user == SUPER_ADMIN_ID:
-        inline_kb.add(InlineKeyboardButton(text='super admin functions', callback_data='super_admin '))
+        inline_kb.add(InlineKeyboardButton(text='[super admin functions]', callback_data='super_admin '))
 
     return text, inline_kb, one_group
 
@@ -434,7 +437,7 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
             settings.period_of_activity,
             settings.report_enabled,
             IFNULL(projects.name, ''),
-            settings.do_not_оutput_name_from_registration,
+            settings.do_not_output_name_from_registration,
 	        settings.check_channel_subscription,
 	        settings.title	
         FROM settings 
@@ -465,9 +468,9 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
     inline_kb.add(InlineKeyboardButton(text='Автоматический отчет в чат: ' + convert_bool(meaning[6]), callback_data=f'settings {id_chat} report_enabled {meaning[6]}'))
     inline_kb.add(InlineKeyboardButton(text='Проект: ' + meaning[7], callback_data=f'settings {id_chat} project_name'))
     if meaning[8]:
-        inline_kb.add(InlineKeyboardButton(text='Имя и фамилия пользователя', callback_data=f'settings {id_chat} do_not_оutput_name_from_registration {meaning[8]}'))
+        inline_kb.add(InlineKeyboardButton(text='Имя и фамилия пользователя', callback_data=f'settings {id_chat} do_not_output_name_from_registration {meaning[8]}'))
     else:
-        inline_kb.add(InlineKeyboardButton(text='Имя и фамилия из регистрации', callback_data=f'settings {id_chat} do_not_оutput_name_from_registration {meaning[8]}'))
+        inline_kb.add(InlineKeyboardButton(text='Имя и фамилия из регистрации', callback_data=f'settings {id_chat} do_not_output_name_from_registration {meaning[8]}'))
 
     check_channel_subscription = meaning[9]
     check_channel_subscription_on = ''
