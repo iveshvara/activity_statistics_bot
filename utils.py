@@ -400,7 +400,7 @@ async def project_admin_process(id_user, project_id, status, message_text=''):
             text = meaning[0]
 
             cursor.execute(
-                '''SELECT DISTINCT id_user FROM settings 
+                '''SELECT DISTINCT chats.id_user FROM settings 
                 INNER JOIN chats ON settings.id_chat = chats.id_chat AND not chats.deleted
                 WHERE project_id = ?''', (project_id,))
             meaning = cursor.fetchall()
