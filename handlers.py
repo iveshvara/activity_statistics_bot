@@ -2,7 +2,8 @@
 from bot import bot, dp, cursor, connect
 from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
-    registration_process, registration_command, insert_or_update_chats, callback_edit_text, message_answer
+    registration_process, registration_command, insert_or_update_chats, callback_edit_text, message_answer, \
+    project_admin_process
 from service import add_buttons_time_selection, shielding
 
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
@@ -14,7 +15,7 @@ import requests
 @dp.message_handler(commands=['start'])
 async def command_start(message: Message):
     if message.chat.type == 'private':
-        id_user = message.from_user.id
+        id_user = message.chat.id
         text, inline_kb, one_group = await get_start_menu(id_user)
 
         if one_group is None:
@@ -150,7 +151,7 @@ async def gender_processing(callback: CallbackQuery):
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('super_admin '))
-async def choosing_a_chat_to_set_up(callback: CallbackQuery):
+async def super_admin_functions(callback: CallbackQuery):
     id_user = callback.from_user.id
     list_str = callback.data.split()
     project_id = ''
@@ -196,6 +197,28 @@ async def choosing_a_chat_to_set_up(callback: CallbackQuery):
         await callback_edit_text(callback, text, inline_kb)
 
 
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('project_admin '))
+async def project_admin_functions(callback: CallbackQuery):
+    id_user = callback.from_user.id
+    list_str = callback.data.split()
+    project_id = ''
+    if len(list_str) > 1:
+        project_id = int(list_str[1])
+    status = ''
+    if len(list_str) > 2:
+        status = list_str[2]
+
+    text, inline_kb = await project_admin_process(id_user, project_id, status, callback.message.message_id)
+
+    if status == 'back':
+        await menu_back(callback)
+    elif status == 'sending':
+        await command_start(callback.message)
+        await callback.message.delete()
+    else:
+        await callback_edit_text(callback, text, inline_kb)
+
+
 @dp.chat_join_request_handler()
 async def join(update: ChatJoinRequest):
     id_user = update.from_user.id
@@ -229,6 +252,18 @@ async def join(update: ChatJoinRequest):
 async def message_handler(message):
     if message.chat.type == 'private':
         if not message.content_type == 'text':
+            return
+
+        id_user = message.from_user.id
+        cursor.execute('SELECT project_id FROM project_administrators WHERE id_user = ? AND status = ?', (id_user, 'text'))
+        meaning = cursor.fetchone()
+        if meaning is not None:
+            text = message.text
+            await message.delete()
+
+            text, inline_kb = await project_admin_process(id_user, meaning[0], 'confirm', text)
+            await message_answer(message, text, inline_kb)
+
             return
 
         await registration_process(message, message.text, False)
@@ -442,7 +477,7 @@ async def command_call_meeting(message: Message):
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('call_meeting '))
-async def menu_back(callback: CallbackQuery):
+async def call_meeting_procces(callback: CallbackQuery):
     id_chat = callback.message.chat.id
     id_user = callback.from_user.id
 

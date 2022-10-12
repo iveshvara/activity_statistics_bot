@@ -135,7 +135,7 @@ async def get_stat(id_chat, id_user=None):
             settings.do_not_оutput_name_from_registration
         FROM settings 
         LEFT OUTER JOIN projects 
-                ON settings.project_id = projects.id
+                ON settings.project_id = projects.project_id
         WHERE id_chat = ?''', (id_chat,))
     meaning = cursor.fetchone()
     if meaning is not None:
@@ -284,9 +284,6 @@ async def get_stat(id_chat, id_user=None):
 
 
 async def get_start_menu(id_user):
-    this_is_super_admin = id_user == SUPER_ADMIN_ID
-    # this_is_super_admin = False
-
     cursor.execute(
         '''SELECT DISTINCT settings.id_chat, settings.title, settings.project_id FROM settings
             LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat 
@@ -337,10 +334,93 @@ async def get_start_menu(id_user):
         for i in user_groups:
             inline_kb.add(InlineKeyboardButton(text=i[1], callback_data=f'id_chat {i[0]}'))
 
-    if this_is_super_admin:
+    cursor.execute(
+        '''SELECT projects.project_id, projects.name FROM project_administrators 
+        INNER JOIN projects ON project_administrators.project_id = projects.project_id
+        WHERE project_administrators.id_user = ?''', (id_user,))
+    meaning = cursor.fetchone()
+    if meaning is not None:
+        inline_kb.add(InlineKeyboardButton(text='Рассылка по "' + meaning[1] + '"', callback_data='project_admin ' + str(meaning[0])))
+
+    if id_user == SUPER_ADMIN_ID:
         inline_kb.add(InlineKeyboardButton(text='super admin functions', callback_data='super_admin '))
 
     return text, inline_kb, one_group
+
+
+async def project_admin_process(id_user, project_id, status, message_text=''):
+    text = ''
+    inline_kb = InlineKeyboardMarkup(row_width=1)
+
+    if status == '':
+        cursor.execute(
+            '''SELECT projects.name, project_administrators.status FROM project_administrators 
+            INNER JOIN projects ON project_administrators.project_id = projects.project_id
+            WHERE project_administrators.id_user = ? AND project_administrators.project_id = ?''', (id_user, project_id))
+        meaning = cursor.fetchone()
+
+        text = shielding(
+            f'Введите текст сообщения, который бот отправит всем студентам всех групп проекта "{meaning[0]}". '
+            'Можно использовать эмодзи и ссылки в открытом виде, введенное форматирование будет утеряно:')
+        inline_kb.add(InlineKeyboardButton(text='Отмена', callback_data=f'project_admin {project_id} back'))
+
+        cursor.execute(
+            'UPDATE project_administrators SET status = ?, message_id = ? WHERE project_id = ? AND id_user = ?',
+            ('text', message_text, project_id, id_user))
+        connect.commit()
+
+    elif status == 'confirm':
+        cursor.execute('UPDATE project_administrators SET status = ?, text = ? WHERE project_id = ? AND id_user = ?',
+                       ('confirm', message_text, project_id, id_user))
+        connect.commit()
+
+        cursor.execute(
+            '''SELECT project_administrators.message_id, projects.name FROM projects 
+            INNER JOIN project_administrators ON projects.project_id = project_administrators.project_id 
+            AND project_administrators.id_user = ?
+            WHERE projects.project_id = ?''', (id_user, project_id))
+        meaning = cursor.fetchone()
+        if meaning is not None:
+            await bot.delete_message(id_user, meaning[0])
+            text = 'Сообщение: \n' + shielding(message_text) + '\n\n' \
+                   + f'Подтвердите отправку сообщения всем студентам всех групп проекта \"{meaning[1]}\"\.\n\n'
+            inline_kb.add(InlineKeyboardButton(text='Подтвердить рассылку', callback_data=f'project_admin {project_id} sending'))
+            inline_kb.add(InlineKeyboardButton(text='Отмена', callback_data=f'project_admin {project_id} back'))
+
+    elif status == 'sending':
+        cursor.execute(
+            '''SELECT text FROM project_administrators 
+            WHERE project_administrators.id_user = ? 
+            AND project_administrators.project_id = ?''', (id_user, project_id))
+        meaning = cursor.fetchone()
+        if meaning is not None:
+            text = meaning[0]
+
+            cursor.execute(
+                '''SELECT DISTINCT id_user FROM settings 
+                INNER JOIN chats ON settings.id_chat = chats.id_chat AND not chats.deleted
+                WHERE project_id = ?''', (project_id,))
+            meaning = cursor.fetchall()
+            if meaning is not None:
+
+                for i in meaning:
+                    # await bot.send_message(text=meaning[0], chat_id=i[0])
+                    if i[0] == SUPER_ADMIN_ID:
+                        await bot.send_message(text=text, chat_id=i[0])
+                        break
+
+                cursor.execute(
+                    'UPDATE project_administrators SET status = ?, text = ?, message_id = ? WHERE project_id = ? AND id_user = ?',
+                    ('', '', 0, project_id, id_user))
+                connect.commit()
+
+    elif status == 'back':
+        cursor.execute(
+            'UPDATE project_administrators SET status = ?, text = ?, message_id = ? WHERE project_id = ? AND id_user = ?',
+            ('', '', 0, project_id, id_user))
+        connect.commit()
+
+    return text, inline_kb
 
 
 async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=False):
@@ -359,7 +439,7 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
 	        settings.title	
         FROM settings 
             LEFT OUTER JOIN projects 
-                ON settings.project_id = projects.id
+                ON settings.project_id = projects.project_id
         WHERE 
             enable_group 
             AND id_chat = ?''', (id_chat,)
@@ -451,7 +531,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
         '''SELECT DISTINCT users.registration_field, users.message_id, projects.name, projects.invite_link FROM chats
             INNER JOIN settings ON chats.id_chat = settings.id_chat
             INNER JOIN users ON chats.id_user = users.id_user
-			INNER JOIN projects ON settings.project_id = projects.id	
+			INNER JOIN projects ON settings.project_id = projects.project_id	
             WHERE settings.enable_group AND chats.id_user = ?''', (id_user,))
     result_tuple = cursor.fetchone()
 
@@ -599,6 +679,9 @@ async def registration_process(message: Message, meaning='', its_callback=False)
 
         if not text == '':
             message = await bot.send_message(text=text, chat_id=id_user, reply_markup=inline_kb, parse_mode='MarkdownV2')
+
+    if registration_field == 'done':
+        return
 
     query_text = ''
 
