@@ -1,11 +1,11 @@
 
 from bot import bot, dp, cursor, connect
 from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
-from utils import get_stat, get_start_menu, setting_up_a_chat, process_parameter_continuation, \
-    registration_process, registration_command, insert_or_update_chats, callback_edit_text, message_answer, \
-    project_admin_process
-from service import add_buttons_time_selection, shielding
-
+from main_functions import get_stat, get_start_menu, \
+    registration_process, registration_command, project_admin_process, homework
+from utility_functions import process_parameter_continuation, insert_or_update_chats, callback_edit_text, \
+    message_answer, setting_up_a_chat
+from service import add_buttons_time_selection, its_admin, shielding
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatJoinRequest
 from geopy.geocoders import Yandex
@@ -50,7 +50,8 @@ async def command_get_stat(message: Message):
         except Exception as e:
             text = f'id_chat: {id_chat}, id_user: {id_user}, text: {text}'
             await bot.send_message(
-                text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}', chat_id=LOGS_CHANNEL_ID)
+                text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}',
+                chat_id=LOGS_CHANNEL_ID)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('id_chat '))
@@ -70,7 +71,6 @@ async def process_parameter(callback: CallbackQuery):
     parameter_value = ''
     if len(list_str) > 3:
         parameter_value = list_str[3]
-
 
     if parameter_name == 'period_of_activity':
         parameter_value_int = int(parameter_value)
@@ -95,9 +95,11 @@ async def process_parameter(callback: CallbackQuery):
 
         inline_kb = InlineKeyboardMarkup(row_width=1)
         for i in projects_tuple:
-            inline_kb.add(InlineKeyboardButton(text=i[1], callback_data='settings ' + str(id_chat) + ' project_id ' + str(i[0])))
+            callback_data = 'settings ' + str(id_chat) + ' project_id ' + str(i[0])
+            inline_kb.add(InlineKeyboardButton(text=i[1], callback_data=callback_data))
 
-        inline_kb.add(InlineKeyboardButton(text='Нет проекта', callback_data='settings ' + str(id_chat) + ' project_id 0'))
+        callback_data = 'settings ' + str(id_chat) + ' project_id 0'
+        inline_kb.add(InlineKeyboardButton(text='Нет проекта', callback_data=callback_data))
 
         await callback_edit_text(callback, text, inline_kb)
 
@@ -152,7 +154,6 @@ async def gender_processing(callback: CallbackQuery):
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('super_admin '))
 async def super_admin_functions(callback: CallbackQuery):
-    id_user = callback.from_user.id
     list_str = callback.data.split()
     project_id = ''
     if len(list_str) > 1:
@@ -208,12 +209,12 @@ async def project_admin_functions(callback: CallbackQuery):
     if len(list_str) > 2:
         status = list_str[2]
 
-    text, inline_kb = await project_admin_process(id_user, project_id, status, callback.message.message_id)
+    text, inline_kb, status = await project_admin_process(project_id, id_user, status, callback.message.message_id)
 
     if status == 'back':
         await menu_back(callback)
-    elif status == 'sending':
-        await command_start(callback.message)
+    elif status in ('homework', 'sending'):
+        # await command_start(callback.message)
         await callback.message.delete()
     else:
         await callback_edit_text(callback, text, inline_kb)
@@ -226,7 +227,7 @@ async def join(update: ChatJoinRequest):
         '''SELECT DISTINCT users.message_id, projects.name, projects.invite_link FROM chats
             INNER JOIN settings ON chats.id_chat = settings.id_chat
             INNER JOIN users ON chats.id_user = users.id_user
-			INNER JOIN projects ON settings.project_id = projects.id	
+            INNER JOIN projects ON settings.project_id = projects.project_id	
             WHERE settings.enable_group AND chats.id_user = ?''', (id_user,))
     meaning = cursor.fetchone()
 
@@ -237,7 +238,8 @@ async def join(update: ChatJoinRequest):
         text = 'Заявка на вступление отклонена. Свяжитесь с вашим куратором для решения этой ситуации.'
     else:
         await update.approve()
-        text = '''Все получилось! \nПоздравляем Вас с успешной регистрацией! \nВаша заявка подтверждена на вступление подтверждена, пожалуйста заходите.'''
+        text = 'Все получилось! \nПоздравляем Вас с успешной регистрацией! \n' \
+               'Ваша заявка подтверждена на вступление подтверждена, пожалуйста заходите.'
         inline_kb.add(InlineKeyboardButton('Зайти в канал.', url=meaning[2]))
         try:
             await bot.delete_message(chat_id=id_user, message_id=meaning[0])
@@ -255,18 +257,33 @@ async def message_handler(message):
             return
 
         id_user = message.from_user.id
-        cursor.execute('SELECT project_id FROM project_administrators WHERE id_user = ? AND status = ?', (id_user, 'text'))
-        meaning = cursor.fetchone()
-        if meaning is not None:
-            text = message.text
-            await message.delete()
+        text = message.text
 
-            text, inline_kb = await project_admin_process(id_user, meaning[0], 'confirm', text)
+        cursor.execute(
+            f'''SELECT 
+            IFNULL((SELECT True FROM users WHERE id_user = {id_user} AND NOT registration_field = 'done' ), False),
+            IFNULL((SELECT project_id FROM homework_check WHERE id_user = {id_user} AND status = 'wait' ), 0),
+            IFNULL((SELECT project_id FROM project_administrators WHERE id_user = {id_user} AND status = 'text' ), 0)''')
+        meaning = cursor.fetchone()
+
+        if meaning[0]:
+            await registration_process(message, text, False)
+
+        elif meaning[1] > 0:
+            text, inline_kb, status = await homework(meaning[1], id_user, text)
             await message_answer(message, text, inline_kb)
 
-            return
+        elif meaning[2] > 0:
+            await message.delete()
 
-        await registration_process(message, message.text, False)
+            text, inline_kb, status = await project_admin_process(meaning[2], id_user, 'confirm', text)
+            await message_answer(message, text, inline_kb)
+
+        else:
+            try:
+                await message.delete()
+            except Exception as e:
+                pass
 
     else:
         id_chat = message.chat.id
@@ -288,7 +305,7 @@ async def message_handler(message):
                 sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
                 period_of_activity, report_enabled, project_id, report_time, enable_group, 
                 last_notify_date, last_notify_message_id_date, 
-                do_not_оutput_name_from_registration, check_channel_subscription) 
+                do_not_output_name_from_registration, check_channel_subscription) 
                 VALUES (?, ?, False, False, False, False, False, 7, False, 0, "00:00", True, 
                 datetime("now"), datetime("now"), False, False)''', (id_chat, title))
             connect.commit()
@@ -322,11 +339,11 @@ async def message_handler(message):
                         meaning = cursor.fetchone()
                         if meaning is None:
                             cursor.execute(
-                                '''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
-                                sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
-                                period_of_activity, report_enabled, project_id, report_time, enable_group, 
-                                last_notify_date, last_notify_message_id_date, 
-                                do_not_оutput_name_from_registration, check_channel_subscription) 
+                                '''INSERT INTO settings (id_chat, title, statistics_for_everyone, 
+                                include_admins_in_statistics, sort_by_messages, do_not_output_the_number_of_messages, 
+                                do_not_output_the_number_of_characters, period_of_activity, report_enabled, project_id, 
+                                report_time, enable_group, last_notify_date, last_notify_message_id_date, 
+                                do_not_output_name_from_registration, check_channel_subscription) 
                                 VALUES (?, ?, False, False, False, False, False, 7, False, 0, "00:00", True, 
                                 datetime("now"), datetime("now"), False, False)''', (id_chat, title))
                         else:
@@ -341,7 +358,8 @@ async def message_handler(message):
                     i_first_name = i.first_name
                     i_last_name = i.last_name
                     i_username = i.username
-                    await insert_or_update_chats(id_chat, i.id, i.first_name, i.last_name, i.username, 0, date_of_the_last_message)
+                    await insert_or_update_chats(id_chat, i.id, i_first_name, i_last_name, i_username, 0,
+                                                 date_of_the_last_message)
 
             return
 
@@ -360,7 +378,7 @@ async def message_handler(message):
 
                 cursor.execute(
                     '''SELECT projects.channel_id FROM settings 
-                    INNER JOIN projects ON settings.project_id = projects.id
+                    INNER JOIN projects ON settings.project_id = projects.project_id
                     AND NOT projects.channel_id = 0  
                     AND settings.id_chat = ?''', (id_chat,))
                 meaning = cursor.fetchone()
@@ -441,14 +459,12 @@ async def command_call_meeting(message: Message):
     id_chat = message.chat.id
     id_user = message.from_user.id
     if message.chat.type == 'group' or message.chat.type == 'supergroup':
-        chat_admins = await bot.get_chat_administrators(id_chat)
-        its_admin = False
-        for i in chat_admins:
-            if i.user.id == id_user:
-                its_admin = True
-                break
+        try:
+            chat_admins = await bot.get_chat_administrators(id_chat)
+        except Exception as e:
+            chat_admins = ()
 
-        if not its_admin:
+        if not its_admin(id_user, chat_admins):
             await message.answer('Эту команду может вызвать только админ группы.')
             return
     else:
@@ -519,7 +535,7 @@ async def call_meeting_process(callback: CallbackQuery):
 
 
 @dp.message_handler(content_types=['contact'])
-async def handle_location(message: Message):
+async def handle_contact(message: Message):
     id_user = message.from_user.id
     tel = message.contact.phone_number
     cursor.execute(f'''UPDATE users SET tel = '{tel}' WHERE id_user = {id_user}''')

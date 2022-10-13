@@ -1,6 +1,6 @@
 
-from settings import SUPER_ADMIN_ID
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from settings import SUPER_ADMIN_ID
 
 
 def its_admin(id_user, chat_admins):
@@ -92,11 +92,11 @@ async def get_projects_cb(projects):
     return inline_kb
 
 
-async def get_name_tg(id_user, first_name, last_name, username, FIO=None):
-    if FIO is None or FIO.split() == '' or len(FIO) < 5:
+async def get_name_tg(id_user, first_name, last_name, username, fio=None):
+    if fio is None or fio.split() == '' or len(fio) < 5:
         name_user = shielding(first_name + ' ' + last_name).strip()
     else:
-        name_user = shielding(FIO).strip()
+        name_user = shielding(fio).strip()
     # if use_username and not i_username == '':
     #     # user = '@' + i_username
     #     user = f'[{name_user}](http://t.me/{i_username})'

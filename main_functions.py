@@ -1,35 +1,16 @@
 
-from bot import bot, cursor, connect, dp
-from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID, SKIP_ERROR_TEXT
-from service import its_admin, shielding, get_name_tg, convert_bool, reduce_large_numbers
-
+from bot import bot, cursor, connect
+from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID
+from service import its_admin, shielding, get_name_tg, reduce_large_numbers
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 # from aiogram.contrib.middlewares.logging import LoggingMiddleware
-
-from datetime import datetime
-import asyncio
-import aioschedule
-
-
-async def on_startup(_):
-    # dp.middleware.setup(LoggingMiddleware())
-
-    asyncio.create_task(scheduler())
-
-    print('Ok')
-
-
-async def scheduler():
-    aioschedule.every().hour.do(run_reminder)
-    while True:
-        await aioschedule.run_pending()
-        await asyncio.sleep(1)
+import datetime
 
 
 async def run_reminder():
     cursor.execute(
-        '''SELECT * FROM settings WHERE strftime("%w", date("now")) = "1" 
-        AND date("now") > date(last_notify_date) AND report_enabled AND enable_group''')
+        'SELECT * FROM settings WHERE strftime("%w", date("now")) = "1" '
+        'AND date("now") > date(last_notify_date) AND report_enabled AND enable_group')
     result_tuple = cursor.fetchall()
     for i in result_tuple:
         id_chat = i[0]
@@ -37,7 +18,7 @@ async def run_reminder():
         # if not text == '' and not text == 'Нет статистики для отображения\.':
         if not text == '':
             await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
-            cursor.execute('UPDATE settings SET last_notify_date = datetime("now") WHERE id_chat = ?', (id_chat, ))
+            cursor.execute('UPDATE settings SET last_notify_date = datetime("now") WHERE id_chat = ?', (id_chat,))
             connect.commit()
 
     text = ''
@@ -102,12 +83,10 @@ async def run_reminder():
             await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
         except Exception as e:
             pass
-        cursor.execute('UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = ?', (id_chat, ))
+
+        cursor.execute('UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = ?',
+                       (id_chat,))
         connect.commit()
-
-
-async def on_shutdown(_):
-    pass
 
 
 async def get_stat(id_chat, id_user=None):
@@ -193,9 +172,9 @@ async def get_stat(id_chat, id_user=None):
             ORDER BY deleted ASC, inactive_days ASC, {sort} DESC ''', (period_of_activity, period_of_activity, id_chat)
         )
         meaning = cursor.fetchall()
-        row_count = len(meaning)
-        row_count = int(len(str(row_count)))
-
+        # row_count = len(meaning)
+        # row_count = int(len(str(row_count)))
+        #
         # text = '`' + align_by_number_of_characters('N', row_count) + ' |  ✉ |    🖋️`'
         text = '*N\. Пользователь: `Сообщений/Символов`*\n'
 
@@ -208,9 +187,9 @@ async def get_stat(id_chat, id_user=None):
             i_last_name = i[2]
             i_username = i[3]
             if do_not_output_name_from_registration:
-                i_FIO = ''
+                i_fio = ''
             else:
-                i_FIO = i[4]
+                i_fio = i[4]
             i_characters = reduce_large_numbers(i[5])
             i_messages = i[6]
             i_deleted = i[7]
@@ -253,10 +232,10 @@ async def get_stat(id_chat, id_user=None):
                 if member_status:
                     channel_subscription = ''
                 else:
-                    channel_subscription = '⚠️ ' # 'Не подписан на канал\. \n     — '
+                    channel_subscription = '⚠️ '  # 'Не подписан на канал\. \n     — '
 
             if not do_not_output_the_number_of_characters:
-                characters = str(i_characters) # символов 💬 🖌
+                characters = str(i_characters)  # символов 💬 🖌
 
             if not do_not_output_the_number_of_messages:
                 messages = str(i_messages)  # сообщений 📃
@@ -266,14 +245,16 @@ async def get_stat(id_chat, id_user=None):
 
             inactive = ''
             if i_deleted:
-                data_str = shielding(datetime.strptime(i_date_of_the_last_message, '%Y-%m-%d %H:%M:%S').strftime("%d.%m.%Y"))#"%d.%m.%Y %H:%M:%S"
+                data_str = shielding(
+                    datetime.datetime.strptime(i_date_of_the_last_message, '%Y-%m-%d %H:%M:%S').strftime(
+                        "%d.%m.%Y"))  # "%d.%m.%Y %H:%M:%S"
                 inactive = f' \(вне чата с {data_str}, дней назад: {int(i_inactive_days)}\)'
             elif i_inactive_days > 0:
                 inactive = f' \(неактивен дней: {int(i_inactive_days)}\)'
             else:
                 specifics += ': `' + messages + '/' + characters + '`'
 
-            user = await get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_FIO)
+            user = await get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_fio)
             count_messages_text = str(count_messages)
             text += f'\n{count_messages_text}\. {channel_subscription}{user}{specifics}{inactive}'
 
@@ -288,16 +269,17 @@ async def get_stat(id_chat, id_user=None):
 
 async def get_start_menu(id_user):
     cursor.execute(
-        '''SELECT DISTINCT settings.id_chat, settings.title, settings.project_id FROM settings
-            LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat 
-            WHERE settings.enable_group AND id_user = ?''', (id_user,))
+        'SELECT DISTINCT settings.id_chat, settings.title, settings.project_id FROM settings '
+        'LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat '
+        'WHERE settings.enable_group AND id_user = ?', (id_user,))
     meaning = cursor.fetchall()
     user_groups = []
     channel_enabled = False
     for i in meaning:
         get = False
         try:
-            # get_chat_administrators - problems
+            # chat_admins = await bot.get_chat_administrators(i[0])
+            # get = its_admin(i[0], chat_admins)
             member = await bot.get_chat_member(i[0], id_user)
             get = member.is_chat_admin()
         except Exception as e:
@@ -338,12 +320,13 @@ async def get_start_menu(id_user):
             inline_kb.add(InlineKeyboardButton(text=i[1], callback_data=f'id_chat {i[0]}'))
 
     cursor.execute(
-        '''SELECT projects.project_id, projects.name FROM project_administrators 
-        INNER JOIN projects ON project_administrators.project_id = projects.project_id
-        WHERE project_administrators.id_user = ?''', (id_user,))
+        'SELECT projects.project_id, projects.name FROM project_administrators '
+        'INNER JOIN projects ON project_administrators.project_id = projects.project_id '
+        'WHERE project_administrators.id_user = ?', (id_user,))
     meaning = cursor.fetchone()
     if meaning is not None:
-        inline_kb.add(InlineKeyboardButton(text='[Рассылка по "' + meaning[1] + '"]', callback_data='project_admin ' + str(meaning[0])))
+        inline_kb.add(InlineKeyboardButton(text='[Рассылка по "' + meaning[1] + '"]',
+                                           callback_data='project_admin ' + str(meaning[0])))
 
     if id_user == SUPER_ADMIN_ID:
         inline_kb.add(InlineKeyboardButton(text='[super admin functions]', callback_data='super_admin '))
@@ -351,20 +334,25 @@ async def get_start_menu(id_user):
     return text, inline_kb, one_group
 
 
-async def project_admin_process(id_user, project_id, status, message_text=''):
+async def project_admin_process(project_id, id_user, status, message_text=''):
     text = ''
     inline_kb = InlineKeyboardMarkup(row_width=1)
+    message_requirements = \
+        shielding('\nТребования к сообщению:\n'
+                  '— Можно использовать эмодзи и ссылки в открытом виде.\n'
+                  '— Нельзя использовать форматирование. Введенное форматирование будет утеряно.\n'
+                  '— Текст должен помещаться в одно сообщение Telegram (не больше 4096 символов).')
 
     if status == '':
         cursor.execute(
-            '''SELECT projects.name, project_administrators.status FROM project_administrators 
-            INNER JOIN projects ON project_administrators.project_id = projects.project_id
-            WHERE project_administrators.id_user = ? AND project_administrators.project_id = ?''', (id_user, project_id))
+            'SELECT projects.name, project_administrators.status FROM project_administrators '
+            'INNER JOIN projects ON project_administrators.project_id = projects.project_id '
+            'WHERE project_administrators.id_user = ? AND project_administrators.project_id = ?',
+            (id_user, project_id))
         meaning = cursor.fetchone()
 
-        text = shielding(
-            f'Введите текст сообщения, который бот отправит всем студентам всех групп проекта "{meaning[0]}". '
-            'Можно использовать эмодзи и ссылки в открытом виде, введенное форматирование будет утеряно:')
+        text = shielding(f'Введите текст сообщения, который бот отправит всем студентам всех групп проекта "{meaning[0]}". ')
+        text += message_requirements
         inline_kb.add(InlineKeyboardButton(text='Отмена', callback_data=f'project_admin {project_id} back'))
 
         cursor.execute(
@@ -373,124 +361,106 @@ async def project_admin_process(id_user, project_id, status, message_text=''):
         connect.commit()
 
     elif status == 'confirm':
+        message_text = message_text.replace('`', '')
+        message_text = message_text.replace('\\', '')
         cursor.execute('UPDATE project_administrators SET status = ?, text = ? WHERE project_id = ? AND id_user = ?',
                        ('confirm', message_text, project_id, id_user))
         connect.commit()
 
         cursor.execute(
-            '''SELECT project_administrators.message_id, projects.name FROM projects 
-            INNER JOIN project_administrators ON projects.project_id = project_administrators.project_id 
-            AND project_administrators.id_user = ?
-            WHERE projects.project_id = ?''', (id_user, project_id))
+            'SELECT project_administrators.message_id, projects.name FROM projects '
+            'INNER JOIN project_administrators ON projects.project_id = project_administrators.project_id '
+            'AND project_administrators.id_user = ? '
+            'WHERE projects.project_id = ?', (id_user, project_id))
         meaning = cursor.fetchone()
         if meaning is not None:
             await bot.delete_message(id_user, meaning[0])
-            text = 'Сообщение: \n' + shielding(message_text) + '\n\n' \
-                   + f'Подтвердите отправку сообщения всем студентам всех групп проекта \"{meaning[1]}\"\.\n\n'
-            inline_kb.add(InlineKeyboardButton(text='Подтвердить рассылку', callback_data=f'project_admin {project_id} sending'))
+            text = shielding(message_text)
+            inline_kb.add(InlineKeyboardButton(text='Отправить как домашнее задание', callback_data=f'project_admin {project_id} homework'))
+            inline_kb.add(InlineKeyboardButton(text='Отправить как рассылку', callback_data=f'project_admin {project_id} sending'))
             inline_kb.add(InlineKeyboardButton(text='Отмена', callback_data=f'project_admin {project_id} back'))
 
-    elif status == 'sending':
-        cursor.execute(
-            '''SELECT text FROM project_administrators 
-            WHERE project_administrators.id_user = ? 
-            AND project_administrators.project_id = ?''', (id_user, project_id))
+    elif status in ('homework', 'sending'):
+        date = None
+        if status == 'homework':
+            date = datetime.date.today()
+            # TODO
+            # cursor.execute('SELECT project_id FROM homework_text WHERE project_id = ? AND date = ?', (project_id, date))
+            # meaning = cursor.fetchone()
+            # if meaning is not None:
+            #     text = 'Можно отправить только одно домашнее задание в день\.'
+            #     inline_kb.add(InlineKeyboardButton(text='Ok', callback_data=f'project_admin {project_id} back'))
+            #     return text, inline_kb, ''
+
+        cursor.execute('SELECT text FROM project_administrators WHERE id_user = ? AND project_id = ?',
+                       (id_user, project_id))
         meaning = cursor.fetchone()
+
         if meaning is not None:
-            text = meaning[0]
+            sending_text = meaning[0]
+
+            if status == 'homework':
+                cursor.execute(
+                    'INSERT INTO homework_text (project_id, sender_id, date, text) VALUES (?, ?, ?, ?)',
+                    (project_id, id_user, date, sending_text))
+                connect.commit()
 
             cursor.execute(
-                '''SELECT DISTINCT chats.id_user FROM settings 
-                INNER JOIN chats ON settings.id_chat = chats.id_chat AND not chats.deleted
-                WHERE project_id = ?''', (project_id,))
+                'SELECT DISTINCT chats.id_user, chats.id_chat FROM settings '
+                'INNER JOIN chats ON settings.id_chat = chats.id_chat AND not chats.deleted '
+                'WHERE project_id = ?', (project_id,))
             meaning = cursor.fetchall()
+
             if meaning is not None:
 
+                last_i_id_chat = None
+                chat_admins = None
+
                 for i in meaning:
-                    # await bot.send_message(text=meaning[0], chat_id=i[0])
-                    if i[0] == SUPER_ADMIN_ID:
-                        await bot.send_message(text=text, chat_id=i[0])
+                    i_id_user = i[0]
+
+                    await bot.send_message(text=sending_text, chat_id=i_id_user)
+
+                    if status == 'homework':
+                        i_id_chat = i[1]
+                        if not last_i_id_chat == i_id_chat:
+                            last_i_id_chat = i_id_chat
+                            try:
+                                chat_admins = await bot.get_chat_administrators(i_id_chat)
+                            except Exception as e:
+                                chat_admins = ()
+                        # TODO
+                        # if not its_admin(i_id_user, chat_admins):
+                            cursor.execute(
+                                'INSERT INTO homework_check (project_id, date, id_chat, id_user, date_actual, status, text, accepted) ' 
+                                'VALUES (?, ?, ?, ?, "", "wait", "", False)', (project_id, date, i_id_chat, i_id_user))
+                            connect.commit()
+
+                        text = shielding('Это домашнее задание. Для его выполнения, вам необходимо написать сообщение. ')
+                        text += message_requirements
+                        await bot.send_message(text=text, chat_id=i_id_user, parse_mode='MarkdownV2')
+
+                    if i_id_user == SUPER_ADMIN_ID:
                         break
 
                 cursor.execute(
-                    'UPDATE project_administrators SET status = ?, text = ?, message_id = ? WHERE project_id = ? AND id_user = ?',
-                    ('', '', 0, project_id, id_user))
+                    'UPDATE project_administrators SET status = "", text = "", message_id = 0 '
+                    'WHERE project_id = ? AND id_user = ?', (project_id, id_user))
                 connect.commit()
 
     elif status == 'back':
         cursor.execute(
-            'UPDATE project_administrators SET status = ?, text = ?, message_id = ? WHERE project_id = ? AND id_user = ?',
-            ('', '', 0, project_id, id_user))
+            'UPDATE project_administrators SET status = "", text = "", message_id = 0 '
+            'WHERE project_id = ? AND id_user = ?', (project_id, id_user))
         connect.commit()
 
-    return text, inline_kb
+    return text, inline_kb, status
 
 
-async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=False):
-    cursor.execute(
-        '''SELECT 
-            settings.statistics_for_everyone,
-            settings.include_admins_in_statistics,
-            settings.sort_by_messages,
-            settings.do_not_output_the_number_of_messages,
-            settings.do_not_output_the_number_of_characters,
-            settings.period_of_activity,
-            settings.report_enabled,
-            IFNULL(projects.name, ''),
-            settings.do_not_output_name_from_registration,
-	        settings.check_channel_subscription,
-	        settings.title	
-        FROM settings 
-            LEFT OUTER JOIN projects 
-                ON settings.project_id = projects.project_id
-        WHERE 
-            enable_group 
-            AND id_chat = ?''', (id_chat,)
-    )
-    meaning = cursor.fetchone()
-
-    if meaning is None:
-        return '', ''
-
-    inline_kb = InlineKeyboardMarkup(row_width=1)
-    if meaning[0]:
-        inline_kb.add(InlineKeyboardButton(text='Статистика доступна всем', callback_data=f'settings {id_chat} statistics_for_everyone {meaning[0]}'))
-    else:
-        inline_kb.add(InlineKeyboardButton(text='Статистика доступна только администраторам', callback_data=f'settings {id_chat} statistics_for_everyone {meaning[0]}'))
-    inline_kb.add(InlineKeyboardButton(text='Включать админов в статистику: ' + convert_bool(meaning[1]), callback_data=f'settings {id_chat} include_admins_in_statistics {meaning[1]}'))
-    if meaning[2]:
-        inline_kb.add(InlineKeyboardButton(text='Сортировка по сообщениям', callback_data=f'settings {id_chat} sort_by_messages {meaning[2]}'))
-    else:
-        inline_kb.add(InlineKeyboardButton(text='Сортировка по количеству символов', callback_data=f'settings {id_chat} sort_by_messages {meaning[2]}'))
-    inline_kb.add(InlineKeyboardButton(text='Не выводить количество сообщений: ' + convert_bool(meaning[3]), callback_data=f'settings {id_chat} do_not_output_the_number_of_messages {meaning[3]}'))
-    inline_kb.add(InlineKeyboardButton(text='Не выводить количество символов: ' + convert_bool(meaning[4]), callback_data=f'settings {id_chat} do_not_output_the_number_of_characters {meaning[4]}'))
-    inline_kb.add(InlineKeyboardButton(text='Статистика за период (дней): ' + str(meaning[5]), callback_data=f'settings {id_chat} period_of_activity {meaning[5]}'))
-    inline_kb.add(InlineKeyboardButton(text='Автоматический отчет в чат: ' + convert_bool(meaning[6]), callback_data=f'settings {id_chat} report_enabled {meaning[6]}'))
-    inline_kb.add(InlineKeyboardButton(text='Проект: ' + meaning[7], callback_data=f'settings {id_chat} project_name'))
-    if meaning[8]:
-        inline_kb.add(InlineKeyboardButton(text='Имя и фамилия пользователя', callback_data=f'settings {id_chat} do_not_output_name_from_registration {meaning[8]}'))
-    else:
-        inline_kb.add(InlineKeyboardButton(text='Имя и фамилия из регистрации', callback_data=f'settings {id_chat} do_not_output_name_from_registration {meaning[8]}'))
-
-    check_channel_subscription = meaning[9]
-    check_channel_subscription_on = ''
-    if check_channel_subscription:
-        check_channel_subscription_on = ' ⚠️'
-    inline_kb.add(InlineKeyboardButton(
-        text='Проверять подписку на канал️: ' + convert_bool(meaning[9]) + check_channel_subscription_on,
-        callback_data=f'settings {id_chat} check_channel_subscription {meaning[9]}'))
-
-
-    if back_button:
-        inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
-
-    if super_admin:
-        inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='super_admin '))
-
-    text = await get_stat(id_chat, id_user)
-
-    group_name = meaning[10]
-    return '*Группа "' + group_name + '"\.*\n\n' + text, inline_kb
+async def homework(project_id, id_user, text):
+    cursor.execute('UPDATE homework_check SET text = ?, status = "check", date_actual = date("now") '
+                   'WHERE status = "wait" AND project_id = ? AND id_user = ? ', (text, project_id, id_user))
+    connect.commit()
 
 
 async def registration_command(callback_message):
@@ -508,15 +478,16 @@ async def registration_command(callback_message):
     result = cursor.fetchone()
 
     if result is None:
-        cursor.execute('''INSERT INTO users (id_user, first_name, last_name, username, language_code, 
-            registration_date, registration_field, FIO, address, tel, mail, projects) 
-            VALUES (?, ?, ?, ?, ?, datetime("now"), "", "", "", "", "", "")''',
+        cursor.execute(
+            'INSERT INTO users (id_user, first_name, last_name, username, language_code, '
+            'registration_date, registration_field, FIO, address, tel, mail, projects) '
+            'VALUES (?, ?, ?, ?, ?, datetime("now"), "", "", "", "", "", "")',
             (id_user, first_name, last_name, username, language_code))
     else:
         cursor.execute(
-            '''UPDATE users SET first_name = ?, last_name = ?, username = ?, language_code = ?, 
-            registration_field = "", projects = "" 
-            WHERE id_user = ?''', (first_name, last_name, username, language_code, id_user))
+            'UPDATE users SET first_name = ?, last_name = ?, username = ?, language_code = ?, '
+            'registration_field = "", projects = "" '
+            'WHERE id_user = ?', (first_name, last_name, username, language_code, id_user))
     connect.commit()
 
     if type(callback_message) == CallbackQuery:
@@ -531,11 +502,11 @@ async def registration_process(message: Message, meaning='', its_callback=False)
     id_user = message.chat.id
 
     cursor.execute(
-        '''SELECT DISTINCT users.registration_field, users.message_id, projects.name, projects.invite_link FROM chats
-            INNER JOIN settings ON chats.id_chat = settings.id_chat
-            INNER JOIN users ON chats.id_user = users.id_user
-			INNER JOIN projects ON settings.project_id = projects.project_id	
-            WHERE settings.enable_group AND chats.id_user = ?''', (id_user,))
+        'SELECT DISTINCT users.registration_field, users.message_id, projects.name, projects.invite_link FROM chats '
+        'INNER JOIN settings ON chats.id_chat = settings.id_chat '
+        'INNER JOIN users ON chats.id_user = users.id_user '
+		'INNER JOIN projects ON settings.project_id = projects.project_id '
+		'WHERE settings.enable_group AND chats.id_user = ?', (id_user,))
     result_tuple = cursor.fetchone()
 
     # if result_tuple is None or result_tuple[0] == '':
@@ -585,7 +556,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
 
         if not fail:
             try:
-                meaning = datetime.strptime(meaning, format_date)
+                meaning = datetime.datetime.strptime(meaning, format_date)
                 fail = False
             except Exception as e:
                 fail = True
@@ -708,87 +679,3 @@ async def registration_process(message: Message, meaning='', its_callback=False)
     except Exception as e:
         await bot.send_message(text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{query_text}\n\nError text:\n{str(e)}',
                                chat_id=LOGS_CHANNEL_ID)
-
-
-async def process_parameter_input(callback: CallbackQuery, id_chat, parameter_name, parameter_value):
-    inline_kb = InlineKeyboardMarkup(row_width=1)
-    inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='back'))
-
-    text = f'Текущее значение параметра {parameter_name} = "{parameter_value}". Введите новое значение:'
-    text = shielding(text)
-    await callback_edit_text(callback, text, inline_kb)
-
-
-async def process_parameter_continuation(callback: CallbackQuery, id_chat, id_user, parameter_name, parameter_value):
-    cursor.execute(f'UPDATE settings SET {parameter_name} = ? WHERE id_chat = ?', (parameter_value, id_chat))
-    connect.commit()
-
-    text, inline_kb = await setting_up_a_chat(id_chat, id_user)
-    await callback_edit_text(callback, text, inline_kb)
-
-
-async def insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message):
-    if last_name is None:
-        last_name = ''
-
-    if username is None:
-        username = ''
-
-    cursor.execute('SELECT * FROM chats WHERE id_chat = ? AND id_user = ?', (id_chat, id_user))
-    meaning = cursor.fetchone()
-    if meaning is None:
-        text = '''INSERT INTO chats (id_chat, id_user, first_name, last_name, username, messages, characters, 
-            deleted, date_of_the_last_message) VALUES (?, ?, ?, ?, ?, 1, ?, False, ?)'''
-        values = (id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message)
-    else:
-        text = f'''UPDATE chats SET messages = messages + 1, characters = characters + ?, first_name = ?, 
-            last_name = ?, username = ?, deleted = False, date_of_the_last_message = ? 
-            WHERE id_chat = ? AND id_user = ?'''
-        values = (characters, first_name, last_name, username, date_of_the_last_message, id_chat, id_user)
-
-    try:
-        cursor.execute(text, values)
-        connect.commit()
-    except Exception as e:
-        await bot.send_message(text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}',
-                               chat_id=LOGS_CHANNEL_ID)
-
-
-async def send_error(text, error_text):
-    if error_text == SKIP_ERROR_TEXT:
-        return
-    text_message = f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{error_text}'
-    length_message = len(text_message)
-    if length_message > 4096:
-        crop_characters = length_message - 4096 - 5
-        text_message = f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text[crop_characters]} \<\.\.\.\>\n\nError text:\n{error_text}'
-
-    await bot.send_message(text=text_message, chat_id=LOGS_CHANNEL_ID)
-
-
-async def callback_edit_text(callback: CallbackQuery, text, inline_kb):
-    try:
-        await callback.message.edit_text(
-            text,
-            parse_mode='MarkdownV2',
-            reply_markup=inline_kb,
-            disable_web_page_preview=True)
-    except Exception as e:
-        await send_error(text, str(e))
-
-
-async def message_answer(message: Message, text, inline_kb=None):
-    if inline_kb is None:
-        inline_kb = InlineKeyboardMarkup(row_width=1)
-
-    try:
-        await message.answer(
-            text,
-            parse_mode='MarkdownV2',
-            reply_markup=inline_kb,
-            disable_web_page_preview=True,
-            disable_notification=False,
-            protect_content=False)
-
-    except Exception as e:
-        await send_error(text, str(e))
