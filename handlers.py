@@ -90,7 +90,7 @@ async def process_parameter(callback: CallbackQuery):
 
     elif parameter_name == 'project_name':
         text = shielding('Выберете ваш проект:')
-        cursor.execute('SELECT id, name FROM projects')
+        cursor.execute('SELECT project_id, name FROM projects')
         projects_tuple = cursor.fetchall()
 
         inline_kb = InlineKeyboardMarkup(row_width=1)
@@ -163,7 +163,7 @@ async def super_admin_functions(callback: CallbackQuery):
 
     if project_id == '' and id_chat == '':
         text = shielding('Выберете ваш проект:')
-        cursor.execute('SELECT id, name FROM projects')
+        cursor.execute('SELECT project_id, name FROM projects')
         projects_tuple = cursor.fetchall()
 
         inline_kb = InlineKeyboardMarkup(row_width=1)
