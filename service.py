@@ -1,6 +1,6 @@
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from settings import SUPER_ADMIN_ID
+from _settings import SUPER_ADMIN_ID
 
 
 def its_admin(id_user, chat_admins):

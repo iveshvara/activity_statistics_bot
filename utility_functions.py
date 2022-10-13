@@ -1,5 +1,5 @@
 
-from settings import SKIP_ERROR_TEXT, THIS_IS_BOT_NAME, LOGS_CHANNEL_ID
+from _settings import SKIP_ERROR_TEXT, THIS_IS_BOT_NAME, LOGS_CHANNEL_ID
 from bot import bot, cursor, connect
 from service import shielding, convert_bool
 from main_functions import get_stat

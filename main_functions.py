@@ -1,6 +1,6 @@
 
 from bot import bot, cursor, connect
-from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID
+from _settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID
 from service import its_admin, shielding, get_name_tg, reduce_large_numbers
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 # from aiogram.contrib.middlewares.logging import LoggingMiddleware
@@ -505,11 +505,10 @@ async def registration_process(message: Message, meaning='', its_callback=False)
         'SELECT DISTINCT users.registration_field, users.message_id, projects.name, projects.invite_link FROM chats '
         'INNER JOIN settings ON chats.id_chat = settings.id_chat '
         'INNER JOIN users ON chats.id_user = users.id_user '
-		'INNER JOIN projects ON settings.project_id = projects.project_id '
-		'WHERE settings.enable_group AND chats.id_user = ?', (id_user,))
+        'INNER JOIN projects ON settings.project_id = projects.project_id '
+        'WHERE settings.enable_group AND chats.id_user = ?', (id_user,))
     result_tuple = cursor.fetchone()
 
-    # if result_tuple is None or result_tuple[0] == '':
     if result_tuple is None:
         return
 

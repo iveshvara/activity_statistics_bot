@@ -1,5 +1,5 @@
 
-from settings import TOKEN
+from _settings import TOKEN
 
 from aiogram import Bot
 from aiogram.dispatcher import Dispatcher

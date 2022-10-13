@@ -1,6 +1,6 @@
 
 from bot import bot, dp, cursor, connect
-from settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
+from _settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from main_functions import get_stat, get_start_menu, \
     registration_process, registration_command, project_admin_process, homework
 from utility_functions import process_parameter_continuation, insert_or_update_chats, callback_edit_text, \
