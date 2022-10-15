@@ -407,7 +407,7 @@ async def project_admin_process(project_id, id_user, status, message_text=''):
 
             cursor.execute(
                 'SELECT DISTINCT chats.id_user, chats.id_chat FROM settings '
-                'INNER JOIN chats ON settings.id_chat = chats.id_chat AND not chats.deleted '
+                'INNER JOIN chats ON settings.id_chat = chats.id_chat AND NOT chats.deleted '
                 'WHERE project_id = ?', (project_id,))
             meaning = cursor.fetchall()
 
@@ -432,8 +432,9 @@ async def project_admin_process(project_id, id_user, status, message_text=''):
                         # TODO
                         # if not its_admin(i_id_user, chat_admins):
                             cursor.execute(
-                                'INSERT INTO homework_check (project_id, date, id_chat, id_user, date_actual, status, text, accepted) ' 
-                                'VALUES (?, ?, ?, ?, "", "wait", "", False)', (project_id, date, i_id_chat, i_id_user))
+                                'INSERT INTO homework_check (project_id, date, id_chat, id_user, date_actual, '
+                                'status, text, accepted, feedback) VALUES (?, ?, ?, ?, "", "sent", "", False, "")',
+                                (project_id, date, i_id_chat, i_id_user))
                             connect.commit()
 
                         text = shielding('Это домашнее задание. Для его выполнения, вам необходимо написать сообщение. ')
@@ -459,7 +460,7 @@ async def project_admin_process(project_id, id_user, status, message_text=''):
 
 async def homework(project_id, id_user, text):
     cursor.execute('UPDATE homework_check SET text = ?, status = "check", date_actual = date("now") '
-                   'WHERE status = "wait" AND project_id = ? AND id_user = ? ', (text, project_id, id_user))
+                   'WHERE status = "sent" AND project_id = ? AND id_user = ? ', (text, project_id, id_user))
     connect.commit()
 
 

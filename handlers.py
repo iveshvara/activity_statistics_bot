@@ -303,10 +303,10 @@ async def message_handler(message):
             cursor.execute(
                 '''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
                 sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
-                period_of_activity, report_enabled, project_id, report_time, enable_group, 
+                period_of_activity, report_enabled, project_id, curators_group, enable_group, 
                 last_notify_date, last_notify_message_id_date, 
                 do_not_output_name_from_registration, check_channel_subscription) 
-                VALUES (?, ?, False, False, False, False, False, 7, False, 0, "00:00", True, 
+                VALUES (?, ?, False, False, False, False, False, 7, False, 0, False, True, 
                 datetime("now"), datetime("now"), False, False)''', (id_chat, title))
             connect.commit()
 
@@ -342,17 +342,17 @@ async def message_handler(message):
                                 '''INSERT INTO settings (id_chat, title, statistics_for_everyone, 
                                 include_admins_in_statistics, sort_by_messages, do_not_output_the_number_of_messages, 
                                 do_not_output_the_number_of_characters, period_of_activity, report_enabled, project_id, 
-                                report_time, enable_group, last_notify_date, last_notify_message_id_date, 
+                                curators_group, enable_group, last_notify_date, last_notify_message_id_date, 
                                 do_not_output_name_from_registration, check_channel_subscription) 
-                                VALUES (?, ?, False, False, False, False, False, 7, False, 0, "00:00", True, 
+                                VALUES (?, ?, False, False, False, False, False, 7, False, 0, False, True, 
                                 datetime("now"), datetime("now"), False, False)''', (id_chat, title))
                         else:
                             cursor.execute('UPDATE settings SET enable_group = True, title = ? WHERE id_chat = ?',
                                            (title, id_chat))
                         connect.commit()
 
-                        text = shielding(f'Добавлена новая группа "{title}"')
-                        await bot.send_message(text=text, chat_id=SUPER_ADMIN_ID, parse_mode='MarkdownV2')
+                        text = f'Добавлена новая группа "{message.chat.title}"'
+                        await bot.send_message(text=text, chat_id=SUPER_ADMIN_ID)
 
                 else:
                     i_first_name = i.first_name
