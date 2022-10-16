@@ -1,4 +1,3 @@
-
 from bot import bot, dp, cursor, connect
 from _settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from main_functions import get_stat, get_start_menu, \
@@ -208,8 +207,11 @@ async def project_admin_functions(callback: CallbackQuery):
     status = ''
     if len(list_str) > 2:
         status = list_str[2]
+    homework_date = ''
+    if len(list_str) > 3:
+        homework_date = list_str[3]
 
-    text, inline_kb, status = await project_admin_process(project_id, id_user, status, callback.message.message_id)
+    text, inline_kb, status = await project_admin_process(project_id, id_user, status, homework_date, callback.message.message_id)
 
     if status == 'back':
         await menu_back(callback)
@@ -276,7 +278,7 @@ async def message_handler(message):
         elif meaning[2] > 0:
             await message.delete()
 
-            text, inline_kb, status = await project_admin_process(meaning[2], id_user, 'confirm', text)
+            text, inline_kb, status = await project_admin_process(meaning[2], id_user, 'confirm', '',  text)
             await message_answer(message, text, inline_kb)
 
         else:
@@ -292,11 +294,10 @@ async def message_handler(message):
         skip_content_type = ('delete_chat_photo', 'migrate_from_chat_id', 'pinned_message')
         created_title_content_type = ('group_chat_created', 'supergroup_chat_created', 'channel_chat_created')
 
-        if len(message.entities) == 1 and message.entities[0].type == 'bot_command':
-            return
-
-        elif message.content_type in skip_content_type:
-            return
+        if len(message.entities) == 1 and message.entities[0].type == 'bot_command' \
+                or message.content_type in skip_content_type \
+                or id_chat == 777000:
+            pass
 
         elif message.content_type in created_title_content_type:
             title = shielding(message.chat.title)
@@ -310,14 +311,10 @@ async def message_handler(message):
                 datetime("now"), datetime("now"), False, False)''', (id_chat, title))
             connect.commit()
 
-            return
-
         elif message.content_type == 'new_chat_title':
             title = shielding(message.chat.title)
             cursor.execute('UPDATE settings SET title = ? WHERE id_chat = ?', (title, id_chat))
             connect.commit()
-
-            return
 
         elif message.content_type == 'migrate_to_chat_id':
             new_id_chat = message.migrate_to_chat_id
@@ -326,8 +323,6 @@ async def message_handler(message):
             cursor.execute('UPDATE messages SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
             cursor.execute('UPDATE settings SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
             connect.commit()
-
-            return
 
         elif message.content_type == 'new_chat_members':
             for i in message.new_chat_members:
@@ -361,7 +356,6 @@ async def message_handler(message):
                     await insert_or_update_chats(id_chat, i.id, i_first_name, i_last_name, i_username, 0,
                                                  date_of_the_last_message)
 
-            return
 
         elif message.content_type == 'left_chat_member':
             i = message.left_chat_member
@@ -387,69 +381,37 @@ async def message_handler(message):
                     await bot.kick_chat_member(channel_id, id_user)
                     await bot.unban_chat_member(channel_id, id_user)
 
-            return
+        else:
 
-        id_user = message.from_user.id
-        first_name = message.from_user.first_name
-        last_name = message.from_user.last_name
-        username = message.from_user.username
-        characters = 0
+            id_user = message.from_user.id
+            first_name = message.from_user.first_name
+            last_name = message.from_user.last_name
+            username = message.from_user.username
+            characters = 0
 
-        message_id = 0
-        if message.content_type == 'text':
+            message_id = 0
+            if message.content_type == 'text':
+                if message.from_user.is_bot:
+                    return
+                characters = len(message.text)
+
+            elif message.content_type == 'photo' and message.caption is not None:
+                characters = len(message.caption)
+
+            elif message.content_type == 'poll':
+                characters = len(message.poll.question)
+                for i in message.poll.options:
+                    characters += len(i.text)
+
             if message.from_user.is_bot:
                 return
-            characters = len(message.text)
-            # if message.text.find('@' + THIS_IS_BOT_NAME) > 0:
-            #     try:
-            #         chat_admins = await bot.get_chat_administrators(id_chat)
-            #         if its_admin(id_user, chat_admins):
-            #             message_id = message.message_id
-            #             cursor.execute(f'SELECT id_user, first_name, last_name, username FROM chats WHERE id_chat = {id_chat} AND deleted = 0')
-            #             result = cursor.fetchall()
-            #             text = 'Внимание\! Общий опрос\: \n'
-            #             for i in result:
-            #                 i_id_user = i[0]
-            #                 i_first_name = i[1]
-            #                 i_last_name = i[2]
-            #                 i_username = i[3]
-            #                 name_user = shielding(i_first_name + ' ' + i_last_name).strip()
-            #                 user = f'[{name_user}](tg://user?id={i_id_user})'
-            #                 if not i_username == '':
-            #                     user += f' \(@{shielding(i_username)}\)'
-            #                 text += user + '\n'
-            #             text += 'Чтобы ваш ответ был учтен, необходимо ответить на сообщение куратора, т\.е\. нажать на сообщение куратора и выбрать \"Ответить\"\.'
-            #             text += '\n \#ВажноеСообщение'
-            #             await message.reply(text, parse_mode='MarkdownV2', disable_notification=True)
-            #             cursor.execute(f'UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = {id_chat}')
-            #             connect.commit()
-            #     except Exception as e:
-            #         pass
-            # if message.reply_to_message is not None:
-            #     autor_id_user = message.from_user.id
-            #     autor_message_id = message.reply_to_message.message_id
-            #     cursor.execute(f'SELECT * FROM messages WHERE id_chat = {id_chat} AND id_user = {autor_id_user} AND message_id = {autor_message_id}')
-            #     meaning = cursor.fetchone()
-            #     if meaning is not None:
-            #         message_id = autor_message_id
-        elif message.content_type == 'photo' and message.caption is not None:
-            characters = len(message.caption)
-        elif message.content_type == 'poll':
-            characters = len(message.poll.question)
-            for i in message.poll.options:
-                characters += len(i.text)
 
-        if message.from_user.is_bot:
-            return
+            cursor.execute('INSERT INTO messages (id_chat, id_user, date, characters, message_id) VALUES (?, ?, ?, ?, ?)',
+                           (id_chat, id_user, date_of_the_last_message, characters, message_id))
+            connect.commit()
 
-        cursor.execute('INSERT INTO messages (id_chat, id_user, date, characters, message_id) VALUES (?, ?, ?, ?, ?)',
-                       (id_chat, id_user, date_of_the_last_message, characters, message_id))
-        connect.commit()
-
-        # cursor.execute(f'SELECT * FROM chats WHERE id_chat = {id_chat} AND id_user = {id_user}')
-        # meaning = cursor.fetchone()
-
-        await insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message)
+            await insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters,
+                                         date_of_the_last_message)
 
 
 # dont use
@@ -580,14 +542,16 @@ async def handle_location(message: Message):
         elif i['kind'] == 'locality' and city == '':
             city = i['name']
 
-    cursor.execute(f'''UPDATE users SET address = '{address}', country = '{country}', area = '{area}', city = '{city}' WHERE id_user = {id_user}''')
+    cursor.execute(
+        f'''UPDATE users SET address = '{address}', country = '{country}', area = '{area}', city = '{city}' WHERE id_user = {id_user}''')
     connect.commit()
 
     if area in ("Севастополь", "Республика Крым"):
         uts = 3
         uts_summer = 3
     else:
-        response_text = requests.get(f'http://api.geonames.org/timezoneJSON?formatted=true&lat={latitude}&lng={longitude}&username={GEONAMES_USERNAME}')  ## Make a request
+        response_text = requests.get(
+            f'http://api.geonames.org/timezoneJSON?formatted=true&lat={latitude}&lng={longitude}&username={GEONAMES_USERNAME}')  ## Make a request
         response = response_text.json()
         uts = response['rawOffset']
         uts_summer = response['dstOffset']

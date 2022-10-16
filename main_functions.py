@@ -334,7 +334,7 @@ async def get_start_menu(id_user):
     return text, inline_kb, one_group
 
 
-async def project_admin_process(project_id, id_user, status, message_text=''):
+async def project_admin_process(project_id, id_user, status, homework_date, message_text=''):
     text = ''
     inline_kb = InlineKeyboardMarkup(row_width=1)
     message_requirements = \
@@ -395,59 +395,113 @@ async def project_admin_process(project_id, id_user, status, message_text=''):
         cursor.execute('SELECT text FROM project_administrators WHERE id_user = ? AND project_id = ?',
                        (id_user, project_id))
         meaning = cursor.fetchone()
+        sending_text = meaning[0]
 
-        if meaning is not None:
-            sending_text = meaning[0]
+        if status == 'homework':
+            cursor.execute(
+                'INSERT INTO homework_text (project_id, sender_id, date, text) VALUES (?, ?, ?, ?)',
+                (project_id, id_user, date, sending_text))
+            connect.commit()
+
+        cursor.execute(
+            '''SELECT DISTINCT 
+                chats.id_user, 
+                chats.id_chat, 
+                chats.homework_message_id_text, 
+                chats.homework_message_id_response, 
+                chats.homework_message_id_feedback 
+            FROM settings 
+            INNER JOIN chats 
+                ON settings.id_chat = chats.id_chat 
+                    AND NOT chats.deleted AND settings.enable_group 
+                    AND NOT settings.curators_group  
+            WHERE 
+                settings.project_id = ?''',
+            (project_id,)
+        )
+        meaning = cursor.fetchall()
+
+        last_i_id_chat = None
+        chat_admins = None
+        for i in meaning:
+            i_id_user = i[0]
+            # TODO
+            if not i_id_user == SUPER_ADMIN_ID:
+                continue
+
+            i_id_chat = i[1]
+            inline_kb = InlineKeyboardMarkup(row_width=1)
 
             if status == 'homework':
-                cursor.execute(
-                    'INSERT INTO homework_text (project_id, sender_id, date, text) VALUES (?, ?, ?, ?)',
-                    (project_id, id_user, date, sending_text))
+                if not last_i_id_chat == i_id_chat:
+                    last_i_id_chat = i_id_chat
+                    try:
+                        chat_admins = await bot.get_chat_administrators(i_id_chat)
+                    except Exception as e:
+                        chat_admins = ()
+
+                # TODO
+                # if not its_admin(i_id_user, chat_admins):
+                if True:
+                    cursor.execute(
+                        'INSERT INTO homework_check (project_id, date, id_chat, id_user, date_actual, '
+                        'status, response, accepted, feedback) VALUES (?, ?, ?, ?, "", "sent", "", False, "")',
+                        (project_id, date, i_id_chat, i_id_user))
+                    connect.commit()
+
+                    cursor.execute('SELECT date, accepted FROM homework_check WHERE project_id = ? AND id_user = ?',
+                                   (project_id, i_id_user))
+                    homeworks = cursor.fetchall()
+                    for ii in homeworks:
+                        homework_date = ii[0]
+                        homework_accepted = ''
+                        if ii[1]:
+                            homework_accepted = '✅'
+                        inline_kb.add(InlineKeyboardButton(
+                            text=homework_accepted + homework_date,
+                            callback_data=f'project_admin {project_id} choice {homework_date}'))
+
+                # text = shielding('Это домашнее задание. Для его выполнения, вам необходимо написать сообщение. ')
+                # text += message_requirements
+                # await bot.send_message(text=text, chat_id=i_id_user, parse_mode='MarkdownV2')
+
+            message = await bot.send_message(text=sending_text, chat_id=i_id_user, reply_markup=inline_kb)
+
+            if status == 'homework':
+                homework_message_id_text = message.message_id
+                cursor.execute('UPDATE chats SET homework_message_id_text = ? WHERE id_chat = ? AND id_user = ?',
+                    (homework_message_id_text, i_id_chat, id_user))
                 connect.commit()
 
-            cursor.execute(
-                'SELECT DISTINCT chats.id_user, chats.id_chat FROM settings '
-                'INNER JOIN chats ON settings.id_chat = chats.id_chat AND NOT chats.deleted '
-                'WHERE project_id = ?', (project_id,))
-            meaning = cursor.fetchall()
+        cursor.execute(
+            'UPDATE project_administrators SET status = "", text = "", message_id = 0 '
+            'WHERE project_id = ? AND id_user = ?', (project_id, id_user))
+        connect.commit()
 
-            if meaning is not None:
+    elif status == 'text':
+        cursor.execute('SELECT text FROM homework_text WHERE project_id = ? AND date = ?',
+            (project_id, homework_date))
+        text = cursor.fetchone()[0]
 
-                last_i_id_chat = None
-                chat_admins = None
+    elif status == 'choice':
+        cursor.execute(
+            'SELECT response, feedback, accepted FROM homework_check '
+            'WHERE project_id = ? AND id_user = ? AND date = ?',
+            (project_id, id_user, homework_date))
+        text_tuple = cursor.fetchone()
 
-                for i in meaning:
-                    i_id_user = i[0]
+        cursor.execute('SELECT date, accepted FROM homework_check WHERE project_id = ? AND id_user = ?',
+                       (project_id, id_user))
+        homeworks = cursor.fetchone()
 
-                    await bot.send_message(text=sending_text, chat_id=i_id_user)
-
-                    if status == 'homework':
-                        i_id_chat = i[1]
-                        if not last_i_id_chat == i_id_chat:
-                            last_i_id_chat = i_id_chat
-                            try:
-                                chat_admins = await bot.get_chat_administrators(i_id_chat)
-                            except Exception as e:
-                                chat_admins = ()
-                        # TODO
-                        # if not its_admin(i_id_user, chat_admins):
-                            cursor.execute(
-                                'INSERT INTO homework_check (project_id, date, id_chat, id_user, date_actual, '
-                                'status, text, accepted, feedback) VALUES (?, ?, ?, ?, "", "sent", "", False, "")',
-                                (project_id, date, i_id_chat, i_id_user))
-                            connect.commit()
-
-                        text = shielding('Это домашнее задание. Для его выполнения, вам необходимо написать сообщение. ')
-                        text += message_requirements
-                        await bot.send_message(text=text, chat_id=i_id_user, parse_mode='MarkdownV2')
-
-                    if i_id_user == SUPER_ADMIN_ID:
-                        break
-
-                cursor.execute(
-                    'UPDATE project_administrators SET status = "", text = "", message_id = 0 '
-                    'WHERE project_id = ? AND id_user = ?', (project_id, id_user))
-                connect.commit()
+        for i in homeworks:
+            homework_date = i[0]
+            homework_accepted = ''
+            if i[1]:
+                homework_accepted = '✅'
+            inline_kb.add(InlineKeyboardButton(
+                text=homework_accepted + homework_date,
+                callback_data=f'project_admin {project_id} choice {homework_date}'))
 
     elif status == 'back':
         cursor.execute(
@@ -459,7 +513,7 @@ async def project_admin_process(project_id, id_user, status, message_text=''):
 
 
 async def homework(project_id, id_user, text):
-    cursor.execute('UPDATE homework_check SET text = ?, status = "check", date_actual = date("now") '
+    cursor.execute('UPDATE homework_check SET response = ?, status = "check", date_actual = date("now") '
                    'WHERE status = "sent" AND project_id = ? AND id_user = ? ', (text, project_id, id_user))
     connect.commit()
 
