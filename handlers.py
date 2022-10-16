@@ -294,7 +294,8 @@ async def message_handler(message):
         skip_content_type = ('delete_chat_photo', 'migrate_from_chat_id', 'pinned_message')
         created_title_content_type = ('group_chat_created', 'supergroup_chat_created', 'channel_chat_created')
 
-        if len(message.entities) == 1 and message.entities[0].type == 'bot_command' \
+        if len(message.entities) == 1 \
+                and message.entities[0].type == 'bot_command' \
                 or message.content_type in skip_content_type \
                 or id_chat == 777000:
             pass
