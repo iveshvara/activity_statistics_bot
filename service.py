@@ -21,6 +21,13 @@ def convert_bool(value):
         return 'Нет'
 
 
+def convert_bool_binary(value):
+    if value == True or value == 1:
+        return '1'
+    else:
+        return '0'
+
+
 def shielding(text):
     text_result = ''
     # allowed_simbols = ' ,:;—'
