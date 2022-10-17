@@ -21,72 +21,72 @@ async def run_reminder():
             cursor.execute('UPDATE settings SET last_notify_date = datetime("now") WHERE id_chat = ?', (id_chat,))
             connect.commit()
 
-    text = ''
-
-    cursor.execute(
-        '''SELECT DISTINCT
-            messages_one.id_chat AS id_chat,
-            messages_two.id_user,
-            chats.first_name,
-            chats.last_name,
-            chats.username 
-        FROM
-            messages AS messages_one
-            LEFT JOIN settings ON settings.id_chat = messages_one.id_chat
-            LEFT JOIN messages AS messages_two ON messages_one.id_chat = messages_two.id_chat
-                    AND messages_one.message_id = messages_two.message_id
-                    AND messages_one.message_id > 0
-            LEFT JOIN chats ON messages_two.id_chat = chats.id_chat
-                    AND messages_two.id_user = chats.id_user
-        WHERE
-            messages_one.message_id > 0
-            AND settings.enable_group
-            AND settings.period_of_activity > Round(JulianDay("now") - JulianDay(messages_one.date), 0)
-            AND Date(settings.last_notify_message_id_date) < Date("now")
-        GROUP BY
-            messages_one.id_chat,
-            messages_two.id_user,
-            chats.first_name,
-            chats.last_name,
-            chats.username,
-            messages_one.message_id
-        ORDER BY
-            id_chat'''
-    )
-    result_tuple = cursor.fetchall()
-    last_id_chat = None
-    id_chat_text_tuple = []
-    for i in result_tuple:
-        id_chat = i[0]
-        if not last_id_chat == id_chat:
-            if last_id_chat is None:
-                last_id_chat = id_chat
-            else:
-                id_chat_text_tuple.append((last_id_chat, text))
-                text = ''
-                last_id_chat = id_chat
-
-        id_user = i[1]
-        first_name = i[2]
-        last_name = i[3]
-        username = i[4]
-        text += await get_name_tg(id_user, first_name, last_name, username)
-    else:
-        if last_id_chat is not None:
-            id_chat_text_tuple.append([last_id_chat, text])
-
-    for i in id_chat_text_tuple:
-        id_chat = i[0]
-        text = i[1]
-        text = 'Сегодня не откликнулись на запрос\: \n' + text + '\n \#ВажноеСообщение'
-        try:
-            await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
-        except Exception as e:
-            pass
-
-        cursor.execute('UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = ?',
-                       (id_chat,))
-        connect.commit()
+    # text = ''
+    #
+    # cursor.execute(
+    #     '''SELECT DISTINCT
+    #         messages_one.id_chat AS id_chat,
+    #         messages_two.id_user,
+    #         chats.first_name,
+    #         chats.last_name,
+    #         chats.username
+    #     FROM
+    #         messages AS messages_one
+    #         LEFT JOIN settings ON settings.id_chat = messages_one.id_chat
+    #         LEFT JOIN messages AS messages_two ON messages_one.id_chat = messages_two.id_chat
+    #                 AND messages_one.message_id = messages_two.message_id
+    #                 AND messages_one.message_id > 0
+    #         LEFT JOIN chats ON messages_two.id_chat = chats.id_chat
+    #                 AND messages_two.id_user = chats.id_user
+    #     WHERE
+    #         messages_one.message_id > 0
+    #         AND settings.enable_group
+    #         AND settings.period_of_activity > Round(JulianDay("now") - JulianDay(messages_one.date), 0)
+    #         AND Date(settings.last_notify_message_id_date) < Date("now")
+    #     GROUP BY
+    #         messages_one.id_chat,
+    #         messages_two.id_user,
+    #         chats.first_name,
+    #         chats.last_name,
+    #         chats.username,
+    #         messages_one.message_id
+    #     ORDER BY
+    #         id_chat'''
+    # )
+    # result_tuple = cursor.fetchall()
+    # last_id_chat = None
+    # id_chat_text_tuple = []
+    # for i in result_tuple:
+    #     id_chat = i[0]
+    #     if not last_id_chat == id_chat:
+    #         if last_id_chat is None:
+    #             last_id_chat = id_chat
+    #         else:
+    #             id_chat_text_tuple.append((last_id_chat, text))
+    #             text = ''
+    #             last_id_chat = id_chat
+    #
+    #     id_user = i[1]
+    #     first_name = i[2]
+    #     last_name = i[3]
+    #     username = i[4]
+    #     text += await get_name_tg(id_user, first_name, last_name, username)
+    # else:
+    #     if last_id_chat is not None:
+    #         id_chat_text_tuple.append([last_id_chat, text])
+    #
+    # for i in id_chat_text_tuple:
+    #     id_chat = i[0]
+    #     text = i[1]
+    #     text = 'Сегодня не откликнулись на запрос\: \n' + text + '\n \#ВажноеСообщение'
+    #     try:
+    #         await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
+    #     except Exception as e:
+    #         pass
+    #
+    #     cursor.execute('UPDATE settings SET last_notify_message_id_date = datetime("now") WHERE id_chat = ?',
+    #                    (id_chat,))
+    #     connect.commit()
 
 
 async def get_stat(id_chat, id_user=None):
@@ -325,8 +325,16 @@ async def get_start_menu(id_user):
         'WHERE project_administrators.id_user = ?', (id_user,))
     meaning = cursor.fetchone()
     if meaning is not None:
+        project_id = str(meaning[0])
+
+        cursor.execute('SELECT date FROM homework_text WHERE project_id = ? ORDER BY date DESC LIMIT 1', (project_id,))
+        meaning_homework = cursor.fetchone()
+        if meaning_homework is not None and not meaning_homework[0] in ('', None):
+            inline_kb.add(InlineKeyboardButton(text='Домашние работы',
+                                               callback_data=f'homework {project_id} text {meaning_homework[0]}'))
+
         inline_kb.add(InlineKeyboardButton(text='[Рассылка по "' + meaning[1] + '"]',
-                                           callback_data='project_admin ' + str(meaning[0])))
+                                           callback_data='homework ' + project_id))
 
     if id_user == SUPER_ADMIN_ID:
         inline_kb.add(InlineKeyboardButton(text='[super admin functions]', callback_data='super_admin '))
@@ -334,14 +342,70 @@ async def get_start_menu(id_user):
     return text, inline_kb, one_group
 
 
-async def project_admin_process(project_id, id_user, status, homework_date, message_text=''):
+async def homework_kb(project_id, id_user, homework_date=None, status='text'):
+    inline_kb = await homework_kb_student(project_id, id_user, homework_date, status)
+
+    return inline_kb
+
+
+async def homework_kb_student(project_id, id_user, homework_date=None, status='text'):
+    text_text = 'Задание'
+    text_response = 'Ваш ответ'
+    text_feedback = 'Отклик куратора'
+
+    if status == 'text':
+        text_text = '⭕ ' + text_text
+    elif status == 'response':
+        text_response = '⭕ ' + text_response
+    elif status == 'feedback':
+        text_feedback = '⭕ ' + text_feedback
+
+    inline_kb = InlineKeyboardMarkup(row_width=1)
+    inline_kb.row(
+        InlineKeyboardButton(text=text_text, callback_data=f'homework {project_id} text {homework_date}'),
+        InlineKeyboardButton(text=text_response, callback_data=f'homework {project_id} response {homework_date}'),
+        InlineKeyboardButton(text=text_feedback, callback_data=f'homework {project_id} feedback {homework_date}')
+    )
+
+    cursor.execute('UPDATE homework_check SET selected = False WHERE project_id = ? AND id_user = ?',
+                   (project_id, id_user))
+    cursor.execute('UPDATE homework_check SET selected = True WHERE project_id = ? AND id_user = ? AND date = ?',
+                   (project_id, id_user, homework_date))
+    connect.commit()
+
+    cursor.execute('SELECT date, status, accepted FROM homework_check WHERE project_id = ? AND id_user = ?',
+                   (project_id, id_user))
+    result = cursor.fetchall()
+    for i in result:
+        date = i[0]
+        homework_status = i[1]
+        accepted = i[2]
+
+        icon = ''
+        homework_accepted = ''
+        if homework_date == date:
+            icon = '🔴'
+        # else:
+        #     if accepted:
+        #         current = '✅'
+
+        inline_kb.add(InlineKeyboardButton(
+            text=icon + ' ' + date + ' — ' + homework_status,
+            callback_data=f'homework {project_id} {status} {date}'))
+
+    inline_kb.add(InlineKeyboardButton(text='Назад', callback_data=f'homework {project_id} back'))
+
+    return inline_kb
+
+
+async def homework_process(project_id, id_user, status, homework_date, message_text=''):
     text = ''
     inline_kb = InlineKeyboardMarkup(row_width=1)
     message_requirements = \
-        shielding('\nТребования к сообщению:\n'
-                  '— Можно использовать эмодзи и ссылки в открытом виде.\n'
-                  '— Нельзя использовать форматирование. Введенное форматирование будет утеряно.\n'
-                  '— Текст должен помещаться в одно сообщение Telegram (не больше 4096 символов).')
+        '\nТребования к сообщению:\n' \
+        '— Можно использовать эмодзи и ссылки в открытом виде.\n' \
+        '— Нельзя использовать форматирование. Введенное форматирование будет утеряно.\n' \
+        '— Текст должен помещаться в одно сообщение Telegram (не больше 4096 символов).'
 
     if status == '':
         cursor.execute(
@@ -351,9 +415,10 @@ async def project_admin_process(project_id, id_user, status, homework_date, mess
             (id_user, project_id))
         meaning = cursor.fetchone()
 
-        text = shielding(f'Введите текст сообщения, который бот отправит всем студентам всех групп проекта "{meaning[0]}". ')
+        text = f'Введите текст сообщения, который бот отправит всем студентам всех групп проекта "{meaning[0]}". '
         text += message_requirements
-        inline_kb.add(InlineKeyboardButton(text='Отмена', callback_data=f'project_admin {project_id} back'))
+        text = shielding(text)
+        inline_kb.add(InlineKeyboardButton(text='Отмена', callback_data=f'homework {project_id} back'))
 
         cursor.execute(
             'UPDATE project_administrators SET status = ?, message_id = ? WHERE project_id = ? AND id_user = ?',
@@ -376,9 +441,9 @@ async def project_admin_process(project_id, id_user, status, homework_date, mess
         if meaning is not None:
             await bot.delete_message(id_user, meaning[0])
             text = shielding(message_text)
-            inline_kb.add(InlineKeyboardButton(text='Отправить как домашнее задание', callback_data=f'project_admin {project_id} homework'))
-            inline_kb.add(InlineKeyboardButton(text='Отправить как рассылку', callback_data=f'project_admin {project_id} sending'))
-            inline_kb.add(InlineKeyboardButton(text='Отмена', callback_data=f'project_admin {project_id} back'))
+            inline_kb.add(InlineKeyboardButton(text='Отправить как домашнее задание', callback_data=f'homework {project_id} homework'))
+            inline_kb.add(InlineKeyboardButton(text='Отправить как рассылку', callback_data=f'homework {project_id} sending'))
+            inline_kb.add(InlineKeyboardButton(text='Отмена', callback_data=f'homework {project_id} back'))
 
     elif status in ('homework', 'sending'):
         date = None
@@ -389,7 +454,7 @@ async def project_admin_process(project_id, id_user, status, homework_date, mess
             # meaning = cursor.fetchone()
             # if meaning is not None:
             #     text = 'Можно отправить только одно домашнее задание в день\.'
-            #     inline_kb.add(InlineKeyboardButton(text='Ok', callback_data=f'project_admin {project_id} back'))
+            #     inline_kb.add(InlineKeyboardButton(text='Ok', callback_data=f'homework {project_id} back'))
             #     return text, inline_kb, ''
 
         cursor.execute('SELECT text FROM project_administrators WHERE id_user = ? AND project_id = ?',
@@ -407,14 +472,14 @@ async def project_admin_process(project_id, id_user, status, homework_date, mess
             '''SELECT DISTINCT 
                 chats.id_user, 
                 chats.id_chat, 
-                chats.homework_message_id_text, 
-                chats.homework_message_id_response, 
-                chats.homework_message_id_feedback 
+                IFNULL(users.menu_message_id, 0)
             FROM settings 
             INNER JOIN chats 
                 ON settings.id_chat = chats.id_chat 
                     AND NOT chats.deleted AND settings.enable_group 
-                    AND NOT settings.curators_group  
+                    AND NOT settings.curators_group
+            LEFT JOIN users 
+                ON chats.id_user = users.id_user 		
             WHERE 
                 settings.project_id = ?''',
             (project_id,)
@@ -430,6 +495,7 @@ async def project_admin_process(project_id, id_user, status, homework_date, mess
                 continue
 
             i_id_chat = i[1]
+            i_message_id = i[2]
             inline_kb = InlineKeyboardMarkup(row_width=1)
 
             if status == 'homework':
@@ -445,31 +511,21 @@ async def project_admin_process(project_id, id_user, status, homework_date, mess
                 if True:
                     cursor.execute(
                         'INSERT INTO homework_check (project_id, date, id_chat, id_user, date_actual, '
-                        'status, response, accepted, feedback) VALUES (?, ?, ?, ?, "", "sent", "", False, "")',
+                        'status, response, accepted, feedback, message_id) '
+                        'VALUES (?, ?, ?, ?, "", "Получено", "", False, "", 0)',
                         (project_id, date, i_id_chat, i_id_user))
                     connect.commit()
 
-                    cursor.execute('SELECT date, accepted FROM homework_check WHERE project_id = ? AND id_user = ?',
-                                   (project_id, i_id_user))
-                    homeworks = cursor.fetchall()
-                    for ii in homeworks:
-                        homework_date = ii[0]
-                        homework_accepted = ''
-                        if ii[1]:
-                            homework_accepted = '✅'
-                        inline_kb.add(InlineKeyboardButton(
-                            text=homework_accepted + homework_date,
-                            callback_data=f'project_admin {project_id} choice {homework_date}'))
+                    inline_kb = await homework_kb(project_id, i_id_user, date)
 
-                # text = shielding('Это домашнее задание. Для его выполнения, вам необходимо написать сообщение. ')
-                # text += message_requirements
-                # await bot.send_message(text=text, chat_id=i_id_user, parse_mode='MarkdownV2')
+            if i_message_id > 0:
+                await bot.delete_message(chat_id=i_id_user, message_id=i_message_id)
 
             message = await bot.send_message(text=sending_text, chat_id=i_id_user, reply_markup=inline_kb)
 
             if status == 'homework':
                 homework_message_id_text = message.message_id
-                cursor.execute('UPDATE chats SET homework_message_id_text = ? WHERE id_chat = ? AND id_user = ?',
+                cursor.execute('UPDATE users SET menu_message_id = ? WHERE id_chat = ? AND id_user = ?',
                     (homework_message_id_text, i_id_chat, id_user))
                 connect.commit()
 
@@ -480,28 +536,33 @@ async def project_admin_process(project_id, id_user, status, homework_date, mess
 
     elif status == 'text':
         cursor.execute('SELECT text FROM homework_text WHERE project_id = ? AND date = ?',
-            (project_id, homework_date))
-        text = cursor.fetchone()[0]
+                       (project_id, homework_date))
+        text = shielding(cursor.fetchone()[0])
+        inline_kb = await homework_kb(project_id, id_user, homework_date, status)
 
-    elif status == 'choice':
+    elif status in ('response', 'feedback'):
         cursor.execute(
-            'SELECT response, feedback, accepted FROM homework_check '
-            'WHERE project_id = ? AND id_user = ? AND date = ?',
-            (project_id, id_user, homework_date))
-        text_tuple = cursor.fetchone()
-
-        cursor.execute('SELECT date, accepted FROM homework_check WHERE project_id = ? AND id_user = ?',
-                       (project_id, id_user))
-        homeworks = cursor.fetchone()
-
-        for i in homeworks:
-            homework_date = i[0]
-            homework_accepted = ''
-            if i[1]:
-                homework_accepted = '✅'
-            inline_kb.add(InlineKeyboardButton(
-                text=homework_accepted + homework_date,
-                callback_data=f'project_admin {project_id} choice {homework_date}'))
+            f'SELECT {status}, accepted, NOT response = "" FROM homework_check '
+            'WHERE project_id = ? AND date = ? AND id_user = ?', (project_id, homework_date, id_user))
+        result = cursor.fetchone()
+        status_meaning = result[0]
+        accepted = bool(result[1])
+        response_is_filled = bool(result[2])
+        if status_meaning in ('', None):
+            if status == 'response':
+                text = 'Для того, чтобы выполнить домашнее задание — пришлите ответ сообщением.'
+                text += message_requirements
+            if status == 'feedback':
+                if accepted:
+                    text = 'Ваше домашнее задание принято.'
+                elif response_is_filled:
+                    text = 'Ваше домашнее задание на проверке у куратора.'
+                else:
+                    text = 'Для начала выполните домашнее задание.'
+        else:
+            text = status_meaning
+        text = shielding(text)
+        inline_kb = await homework_kb(project_id, id_user, homework_date, status)
 
     elif status == 'back':
         cursor.execute(
@@ -512,9 +573,10 @@ async def project_admin_process(project_id, id_user, status, homework_date, mess
     return text, inline_kb, status
 
 
-async def homework(project_id, id_user, text):
-    cursor.execute('UPDATE homework_check SET response = ?, status = "check", date_actual = date("now") '
-                   'WHERE status = "sent" AND project_id = ? AND id_user = ? ', (text, project_id, id_user))
+async def homework_response(project_id, homework_date, id_user, text):
+    cursor.execute('UPDATE homework_check SET response = ?, status = "На проверке", date_actual = date("now") '
+                   'WHERE project_id = ? AND date = ? AND id_user = ? AND status = "Получено" ',
+                   (text, project_id, homework_date, id_user))
     connect.commit()
 
 
@@ -557,7 +619,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
     id_user = message.chat.id
 
     cursor.execute(
-        'SELECT DISTINCT users.registration_field, users.message_id, projects.name, projects.invite_link FROM chats '
+        'SELECT DISTINCT users.registration_field, users.menu_message_id, projects.name, projects.invite_link FROM chats '
         'INNER JOIN settings ON chats.id_chat = settings.id_chat '
         'INNER JOIN users ON chats.id_user = users.id_user '
         'INNER JOIN projects ON settings.project_id = projects.project_id '
@@ -725,7 +787,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
     if not query_text == '':
         query_text += ', '
 
-    query_text += f'message_id = {message.message_id}'
+    query_text += f'menu_message_id = {message.message_id}'
     query_text = f'''UPDATE users SET {query_text} WHERE id_user = {id_user}'''
     try:
         cursor.execute(query_text)

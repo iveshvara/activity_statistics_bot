@@ -1,9 +1,9 @@
-from bot import bot, dp, cursor, connect
-from _settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
-from main_functions import get_stat, get_start_menu, \
-    registration_process, registration_command, project_admin_process, homework
-from utility_functions import process_parameter_continuation, insert_or_update_chats, callback_edit_text, \
-    message_answer, setting_up_a_chat
+from bot import bot, dp, base, cursor, connect
+from _settings import THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
+from main_functions import get_stat, get_start_menu, registration_process, registration_command, \
+    homework_process, homework_response, homework_kb
+from utility_functions import process_parameter_continuation, callback_edit_text, \
+    message_answer, setting_up_a_chat, last_menu_message_delete
 from service import add_buttons_time_selection, its_admin, shielding
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatJoinRequest
@@ -15,8 +15,9 @@ import requests
 async def command_start(message: Message):
     if message.chat.type == 'private':
         id_user = message.chat.id
-        text, inline_kb, one_group = await get_start_menu(id_user)
+        await last_menu_message_delete(id_user)
 
+        text, inline_kb, one_group = await get_start_menu(id_user)
         if one_group is None:
             await message_answer(message, text, inline_kb)
         else:
@@ -24,11 +25,24 @@ async def command_start(message: Message):
             await message_answer(message, text, inline_kb)
 
 
+@dp.message_handler(commands=['test'])
+async def command_start(message: Message):
+    cursor.execute('''SELECT DISTINCT chats.id_user, chats.first_name, chats.last_name, chats.username FROM chats 
+                    LEFT JOIN users ON chats.id_user = users.id_user
+                    WHERE users.id_user IS NULL''')
+    meaning = cursor.fetchall()
+    for i in meaning:
+        cursor.execute(
+            'INSERT INTO users (id_user, first_name, last_name, username, language_code, registration_date, registration_field, message_id, gender, FIO, birthdate, address, tel, mail, projects) '
+            'VALUES (?, ?, ?, ?, "", "", "", "", "", "", "", "", "", "", "")',
+            (i[0], i[1], i[2], i[3]))
+        connect.commit()
+
+
 @dp.message_handler(commands=['get_stat'])
 async def command_get_stat(message: Message):
-    if not (message.chat.type == 'group' or message.chat.type == 'supergroup'):
-        if message.chat.type == 'private':
-            await message.answer('Эта команда работает в группе. Здесь используйте команду /start')
+    if message.chat.type == 'private':
+        await message.answer('Эта команда работает в группе. Здесь используйте команду /start')
         return
 
     await message_handler(message)
@@ -36,21 +50,10 @@ async def command_get_stat(message: Message):
     id_chat = message.chat.id
     id_user = message.from_user.id
 
-    command = message.text.split('@')[0]
-    text = ''
-    if command == '/get_stat':
-        text = await get_stat(id_chat, id_user)
-    elif command == '/test':
-        text = ''
+    text = await get_stat(id_chat, id_user)
 
     if not text == '':
-        try:
-            await message_answer(message, text)
-        except Exception as e:
-            text = f'id_chat: {id_chat}, id_user: {id_user}, text: {text}'
-            await bot.send_message(
-                text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}',
-                chat_id=LOGS_CHANNEL_ID)
+        await message_answer(message, text)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('id_chat '))
@@ -76,8 +79,6 @@ async def process_parameter(callback: CallbackQuery):
         adding = 0
         if 0 <= parameter_value_int < 7:
             adding = 1
-        # elif 7 <= parameter_value_int < 20:
-        #     adding = 7
         elif 7 <= parameter_value_int < 21:
             adding = 7
         elif parameter_value_int == 21:
@@ -103,13 +104,11 @@ async def process_parameter(callback: CallbackQuery):
         await callback_edit_text(callback, text, inline_kb)
 
     elif parameter_name == 'project_id':
-        cursor.execute('UPDATE settings SET project_id = ? WHERE id_chat = ?', (parameter_value, id_chat))
-        connect.commit()
+        await base.save_chat_project(parameter_value, id_chat)
         text, inline_kb = await setting_up_a_chat(id_chat, id_user)
 
         await callback_edit_text(callback, text, inline_kb)
     else:
-        # parameter_value = not parameter_value
         if parameter_value == '0':
             parameter_value = 1
         else:
@@ -197,8 +196,8 @@ async def super_admin_functions(callback: CallbackQuery):
         await callback_edit_text(callback, text, inline_kb)
 
 
-@dp.callback_query_handler(lambda x: x.data and x.data.startswith('project_admin '))
-async def project_admin_functions(callback: CallbackQuery):
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('homework '))
+async def homework_functions(callback: CallbackQuery):
     id_user = callback.from_user.id
     list_str = callback.data.split()
     project_id = ''
@@ -210,13 +209,13 @@ async def project_admin_functions(callback: CallbackQuery):
     homework_date = ''
     if len(list_str) > 3:
         homework_date = list_str[3]
+    message_id = callback.message.message_id
 
-    text, inline_kb, status = await project_admin_process(project_id, id_user, status, homework_date, callback.message.message_id)
+    text, inline_kb, status = await homework_process(project_id, id_user, status, homework_date, message_id)
 
     if status == 'back':
         await menu_back(callback)
     elif status in ('homework', 'sending'):
-        # await command_start(callback.message)
         await callback.message.delete()
     else:
         await callback_edit_text(callback, text, inline_kb)
@@ -254,31 +253,40 @@ async def join(update: ChatJoinRequest):
 
 @dp.message_handler(content_types='any')
 async def message_handler(message):
+    id_user = message.from_user.id
+
     if message.chat.type == 'private':
         if not message.content_type == 'text':
             return
 
-        id_user = message.from_user.id
         text = message.text
 
         cursor.execute(
             f'''SELECT 
-            IFNULL((SELECT True FROM users WHERE id_user = {id_user} AND NOT registration_field = 'done' ), False),
-            IFNULL((SELECT project_id FROM homework_check WHERE id_user = {id_user} AND status = 'wait' ), 0),
-            IFNULL((SELECT project_id FROM project_administrators WHERE id_user = {id_user} AND status = 'text' ), 0)''')
+            IFNULL((SELECT True FROM users WHERE id_user = {id_user} AND NOT registration_field = 'done'), False),
+            IFNULL((SELECT project_id FROM project_administrators WHERE id_user = {id_user} AND status = 'text'), 0), 
+            IFNULL((SELECT project_id FROM homework_check WHERE id_user = {id_user} AND accepted = False AND selected = True), 0),
+            IFNULL((SELECT date FROM homework_check WHERE id_user = {id_user} AND accepted = False AND selected = True), 0)''')
         meaning = cursor.fetchone()
+        registration = meaning[0]
+        project_administrators_project_id = meaning[1]
+        homework_project_id = meaning[2]
+        homework_date = meaning[3]
 
-        if meaning[0]:
+        if registration:
             await registration_process(message, text, False)
 
-        elif meaning[1] > 0:
-            text, inline_kb, status = await homework(meaning[1], id_user, text)
-            await message_answer(message, text, inline_kb)
-
-        elif meaning[2] > 0:
+        elif project_administrators_project_id > 0:
             await message.delete()
 
-            text, inline_kb, status = await project_admin_process(meaning[2], id_user, 'confirm', '',  text)
+            text, inline_kb, status = await homework_process(project_administrators_project_id, id_user, 'confirm', '', text)
+            await message_answer(message, text, inline_kb)
+
+        elif homework_project_id > 0:
+            await last_menu_message_delete(id_user)
+            await homework_response(homework_project_id, homework_date, id_user, text)
+            inline_kb = await homework_kb(homework_project_id, id_user, homework_date, 'response')
+            text = shielding(text)
             await message_answer(message, text, inline_kb)
 
         else:
@@ -297,33 +305,36 @@ async def message_handler(message):
         if len(message.entities) == 1 \
                 and message.entities[0].type == 'bot_command' \
                 or message.content_type in skip_content_type \
-                or id_chat == 777000:
+                or id_user == 777000:
             pass
 
         elif message.content_type in created_title_content_type:
             title = shielding(message.chat.title)
-            cursor.execute(
-                '''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
-                sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
-                period_of_activity, report_enabled, project_id, curators_group, enable_group, 
-                last_notify_date, last_notify_message_id_date, 
-                do_not_output_name_from_registration, check_channel_subscription) 
-                VALUES (?, ?, False, False, False, False, False, 7, False, 0, False, True, 
-                datetime("now"), datetime("now"), False, False)''', (id_chat, title))
-            connect.commit()
+            # cursor.execute(
+            #     '''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics,
+            #     sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters,
+            #     period_of_activity, report_enabled, project_id, curators_group, enable_group,
+            #     last_notify_date, last_notify_message_id_date,
+            #     do_not_output_name_from_registration, check_channel_subscription)
+            #     VALUES (?, ?, False, False, False, False, False, 7, False, 0, False, True,
+            #     datetime("now"), datetime("now"), False, False)''', (id_chat, title))
+            # connect.commit()
+            await base.save_new_chat(id_chat, title)
 
         elif message.content_type == 'new_chat_title':
             title = shielding(message.chat.title)
-            cursor.execute('UPDATE settings SET title = ? WHERE id_chat = ?', (title, id_chat))
-            connect.commit()
+            # cursor.execute('UPDATE settings SET title = ? WHERE id_chat = ?', (title, id_chat))
+            # connect.commit()
+            await base.save_new_title(id_chat, title)
 
         elif message.content_type == 'migrate_to_chat_id':
             new_id_chat = message.migrate_to_chat_id
-            cursor.execute('UPDATE chats SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
-            cursor.execute('UPDATE meetings SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
-            cursor.execute('UPDATE messages SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
-            cursor.execute('UPDATE settings SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
-            connect.commit()
+            # cursor.execute('UPDATE chats SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
+            # cursor.execute('UPDATE meetings SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
+            # cursor.execute('UPDATE messages SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
+            # cursor.execute('UPDATE settings SET id_chat = ? WHERE id_chat = ?', (new_id_chat, id_chat))
+            # connect.commit()
+            await base.migrate_to_chat_id(new_id_chat, id_chat)
 
         elif message.content_type == 'new_chat_members':
             for i in message.new_chat_members:
@@ -331,65 +342,59 @@ async def message_handler(message):
                     if i.username == THIS_IS_BOT_NAME:
                         title = shielding(message.chat.title)
 
-                        cursor.execute('SELECT * FROM settings WHERE id_chat = ?', (id_chat,))
-                        meaning = cursor.fetchone()
-                        if meaning is None:
-                            cursor.execute(
-                                '''INSERT INTO settings (id_chat, title, statistics_for_everyone, 
-                                include_admins_in_statistics, sort_by_messages, do_not_output_the_number_of_messages, 
-                                do_not_output_the_number_of_characters, period_of_activity, report_enabled, project_id, 
-                                curators_group, enable_group, last_notify_date, last_notify_message_id_date, 
-                                do_not_output_name_from_registration, check_channel_subscription) 
-                                VALUES (?, ?, False, False, False, False, False, 7, False, 0, False, True, 
-                                datetime("now"), datetime("now"), False, False)''', (id_chat, title))
-                        else:
-                            cursor.execute('UPDATE settings SET enable_group = True, title = ? WHERE id_chat = ?',
-                                           (title, id_chat))
-                        connect.commit()
+                        # cursor.execute('SELECT * FROM settings WHERE id_chat = ?', (id_chat,))
+                        # meaning = cursor.fetchone()
+                        # if meaning is None:
+                        #     cursor.execute(
+                        #         '''INSERT INTO settings (id_chat, title, statistics_for_everyone,
+                        #         include_admins_in_statistics, sort_by_messages, do_not_output_the_number_of_messages,
+                        #         do_not_output_the_number_of_characters, period_of_activity, report_enabled, project_id,
+                        #         curators_group, enable_group, last_notify_date, last_notify_message_id_date,
+                        #         do_not_output_name_from_registration, check_channel_subscription)
+                        #         VALUES (?, ?, False, False, False, False, False, 7, False, 0, False, True,
+                        #         datetime("now"), datetime("now"), False, False)''', (id_chat, title))
+                        # else:
+                        #     cursor.execute('UPDATE settings SET enable_group = True, title = ? WHERE id_chat = ?',
+                        #                    (title, id_chat))
+                        # connect.commit()
+                        await base.save_or_update_new_title(id_chat, title)
 
                         text = f'Добавлена новая группа "{message.chat.title}"'
                         await bot.send_message(text=text, chat_id=SUPER_ADMIN_ID)
 
                 else:
-                    i_first_name = i.first_name
-                    i_last_name = i.last_name
-                    i_username = i.username
-                    await insert_or_update_chats(id_chat, i.id, i_first_name, i_last_name, i_username, 0,
-                                                 date_of_the_last_message)
 
+                    await base.insert_or_update_chats_and_users(id_chat, i, 0, date_of_the_last_message)
 
         elif message.content_type == 'left_chat_member':
             i = message.left_chat_member
             if i.is_bot:
                 if i.username == THIS_IS_BOT_NAME:
-                    cursor.execute('UPDATE settings SET enable_group = False WHERE id_chat = ?', (id_chat,))
-                    connect.commit()
-            else:
-                id_user = i.id
-                cursor.execute(
-                    'UPDATE chats SET deleted = True, date_of_the_last_message = ? WHERE id_chat = ? AND id_user = ?',
-                    (date_of_the_last_message, id_chat, id_user))
-                connect.commit()
+                    # cursor.execute('UPDATE settings SET enable_group = False WHERE id_chat = ?', (id_chat,))
+                    # connect.commit()
+                    await base.save_chat_disable(id_chat)
 
-                cursor.execute(
-                    '''SELECT projects.channel_id FROM settings 
-                    INNER JOIN projects ON settings.project_id = projects.project_id
-                    AND NOT projects.channel_id = 0  
-                    AND settings.id_chat = ?''', (id_chat,))
-                meaning = cursor.fetchone()
-                if meaning is not None:
-                    channel_id = meaning[0]
-                    await bot.kick_chat_member(channel_id, id_user)
-                    await bot.unban_chat_member(channel_id, id_user)
+            else:
+                i_id_user = i.id
+                # cursor.execute(
+                #     'UPDATE chats SET deleted = True, date_of_the_last_message = ? WHERE id_chat = ? AND id_user = ?',
+                #     (date_of_the_last_message, id_chat, id_user))
+                # connect.commit()
+                #
+                # cursor.execute(
+                #     '''SELECT projects.channel_id FROM settings
+                #     INNER JOIN projects ON settings.project_id = projects.project_id
+                #     AND NOT projects.channel_id = 0
+                #     AND settings.id_chat = ?''', (id_chat,))
+                # result = cursor.fetchone()
+                result = await base.save_user_disable_in_chat(id_chat, i_id_user, date_of_the_last_message)
+                if result is not None:
+                    channel_id = result[0]
+                    await bot.kick_chat_member(channel_id, i_id_user)
+                    await bot.unban_chat_member(channel_id, i_id_user)
 
         else:
-
-            id_user = message.from_user.id
-            first_name = message.from_user.first_name
-            last_name = message.from_user.last_name
-            username = message.from_user.username
             characters = 0
-
             message_id = 0
             if message.content_type == 'text':
                 if message.from_user.is_bot:
@@ -407,12 +412,9 @@ async def message_handler(message):
             if message.from_user.is_bot:
                 return
 
-            cursor.execute('INSERT INTO messages (id_chat, id_user, date, characters, message_id) VALUES (?, ?, ?, ?, ?)',
-                           (id_chat, id_user, date_of_the_last_message, characters, message_id))
-            connect.commit()
+            await base.save_message_count(id_chat, id_user, date_of_the_last_message, characters, message_id)
 
-            await insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters,
-                                         date_of_the_last_message)
+            await base.insert_or_update_chats(id_chat, message.from_user, characters, date_of_the_last_message)
 
 
 # dont use

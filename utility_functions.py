@@ -1,37 +1,9 @@
 
 from _settings import SKIP_ERROR_TEXT, THIS_IS_BOT_NAME, LOGS_CHANNEL_ID
-from bot import bot, cursor, connect
+from bot import bot, cursor, connect, base
 from service import shielding, convert_bool
 from main_functions import get_stat
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-
-
-async def insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters,
-                                 date_of_the_last_message):
-    if last_name is None:
-        last_name = ''
-
-    if username is None:
-        username = ''
-
-    cursor.execute('SELECT * FROM chats WHERE id_chat = ? AND id_user = ?', (id_chat, id_user))
-    meaning = cursor.fetchone()
-    if meaning is None:
-        text = '''INSERT INTO chats (id_chat, id_user, first_name, last_name, username, messages, characters, 
-            deleted, date_of_the_last_message) VALUES (?, ?, ?, ?, ?, 1, ?, False, ?)'''
-        values = (id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message)
-    else:
-        text = f'''UPDATE chats SET messages = messages + 1, characters = characters + ?, first_name = ?, 
-            last_name = ?, username = ?, deleted = False, date_of_the_last_message = ? 
-            WHERE id_chat = ? AND id_user = ?'''
-        values = (characters, first_name, last_name, username, date_of_the_last_message, id_chat, id_user)
-
-    try:
-        cursor.execute(text, values)
-        connect.commit()
-    except Exception as e:
-        await bot.send_message(text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}',
-                               chat_id=LOGS_CHANNEL_ID)
 
 
 async def send_error(text, error_text):
@@ -47,8 +19,12 @@ async def send_error(text, error_text):
 
 
 async def callback_edit_text(callback: CallbackQuery, text, inline_kb):
+    await message_edit_text(callback.message, text, inline_kb)
+
+
+async def message_edit_text(message: Message, text, inline_kb):
     try:
-        await callback.message.edit_text(
+        await message.edit_text(
             text,
             parse_mode='MarkdownV2',
             reply_markup=inline_kb,
@@ -62,7 +38,7 @@ async def message_answer(message: Message, text, inline_kb=None):
         inline_kb = InlineKeyboardMarkup(row_width=1)
 
     try:
-        await message.answer(
+        new_message = await message.answer(
             text,
             parse_mode='MarkdownV2',
             reply_markup=inline_kb,
@@ -70,8 +46,20 @@ async def message_answer(message: Message, text, inline_kb=None):
             disable_notification=False,
             protect_content=False)
 
+        if inline_kb is not None:
+            await base.save_menu_message_id(new_message)
+
     except Exception as e:
         await send_error(text, str(e))
+
+
+async def last_menu_message_delete(id_user):
+    message_id = await base.get_menu_message_id(id_user)
+    if message_id > 0:
+        try:
+            await bot.delete_message(chat_id=id_user, message_id=message_id)
+        except Exception as e:
+            pass
 
 
 async def process_parameter_continuation(callback: CallbackQuery, id_chat, id_user, parameter_name, parameter_value):
@@ -157,3 +145,32 @@ async def process_parameter_input(callback: CallbackQuery, parameter_name, param
     text = f'Текущее значение параметра {parameter_name} = "{parameter_value}". Введите новое значение:'
     text = shielding(text)
     await callback_edit_text(callback, text, inline_kb)
+
+
+async def insert_or_update_chats(id_chat, id_user, first_name, last_name, username, characters,
+                                 date_of_the_last_message):
+    if last_name is None:
+        last_name = ''
+
+    if username is None:
+        username = ''
+
+    cursor.execute('SELECT * FROM chats WHERE id_chat = ? AND id_user = ?', (id_chat, id_user))
+    meaning = cursor.fetchone()
+    if meaning is None:
+        text = '''INSERT INTO chats (id_chat, id_user, first_name, last_name, username, messages, characters, 
+            deleted, date_of_the_last_message) VALUES (?, ?, ?, ?, ?, 1, ?, False, ?)'''
+        values = (id_chat, id_user, first_name, last_name, username, characters, date_of_the_last_message)
+    else:
+        text = f'''UPDATE chats SET messages = messages + 1, characters = characters + ?, first_name = ?, 
+            last_name = ?, username = ?, deleted = False, date_of_the_last_message = ? 
+            WHERE id_chat = ? AND id_user = ?'''
+        values = (characters, first_name, last_name, username, date_of_the_last_message, id_chat, id_user)
+
+    try:
+        cursor.execute(text, values)
+        connect.commit()
+    except Exception as e:
+        await bot.send_message(text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text}\n\nError text:\n{str(e)}',
+                               chat_id=LOGS_CHANNEL_ID)
+
