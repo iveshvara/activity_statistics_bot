@@ -1,19 +1,18 @@
 
 from bot import bot, cursor, connect
 from _settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID
-from service import its_admin, shielding, get_name_tg, reduce_large_numbers
+from service import its_admin, shielding, get_name_tg, reduce_large_numbers, get_today
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 # from aiogram.contrib.middlewares.logging import LoggingMiddleware
 import datetime
 
 
 async def run_reminder():
-    today = datetime.datetime.today()
+    today = get_today()
     weekday = today.weekday()
     if weekday == 1:
-        cursor.execute(
-            f'SELECT * FROM settings WHERE report_enabled AND enable_group '
-            f'AND {today} > last_notify_date')
+        cursor.execute('SELECT * FROM settings WHERE report_enabled AND enable_group AND %s > last_notify_date',
+                       (today,))
         result_tuple = cursor.fetchall()
         for i in result_tuple:
             id_chat = i[0]
@@ -140,7 +139,7 @@ async def get_stat(id_chat, id_user=None):
         else:
             sort = 'characters'
 
-        today = datetime.datetime.today()
+        today = get_today()
         count_messages = 0
         cursor.execute(
             f'''SELECT 
@@ -447,7 +446,7 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
     elif status in ('homework', 'sending'):
         date = None
         if status == 'homework':
-            date = datetime.date.today()
+            date = get_today(True)
             # TODO
             # cursor.execute('SELECT project_id FROM homework_text WHERE project_id = %s AND date = %s', (project_id, date))
             # meaning = cursor.fetchone()
@@ -573,7 +572,7 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
 
 
 async def homework_response(project_id, homework_date, id_user, text):
-    today = datetime.datetime.today()
+    today = get_today()
     cursor.execute("UPDATE homework_check SET response = %s, status = 'На проверке', date_actual = %s "
                    "WHERE project_id = %s AND date = %s AND id_user = %s AND status = 'Получено' ",
                    (text, today, project_id, homework_date, id_user))
@@ -595,7 +594,7 @@ async def registration_command(callback_message):
     result = cursor.fetchone()
 
     if result is None:
-        today = datetime.datetime.today()
+        today = get_today()
         cursor.execute(
             "INSERT INTO users (id_user, first_name, last_name, username, language_code, "
             "registration_date, registration_field, fio, address, tel, mail, projects, role) "

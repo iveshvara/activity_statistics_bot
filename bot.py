@@ -1,5 +1,6 @@
 
 from _settings import TOKEN, SKIP_ERROR_TEXT, THIS_IS_BOT_NAME, LOGS_CHANNEL_ID
+from service import get_today
 from aiogram import Bot
 from aiogram.dispatcher import Dispatcher
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -42,44 +43,44 @@ class Database:
 
     async def save_new_chat(self, id_chat, title):
         try:
+            today = get_today()
             with self.connect:
                 self.cursor.execute(
-                    '''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
-                    sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
-                    period_of_activity, report_enabled, project_id, curators_group, enable_group, 
-                    last_notify_date, last_notify_message_id_date, 
-                    do_not_output_name_from_registration, check_channel_subscription) 
-                    VALUES (%s, %s, False, False, False, False, False, 7, False, 0, False, True, 
-                    datetime("now"), datetime("now"), False, False)''', (id_chat, title))
+                    "INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, "
+                    "sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, " 
+                    "period_of_activity, report_enabled, project_id, curators_group, enable_group, last_notify_date, "
+                    "last_notify_message_id_date, do_not_output_name_from_registration, check_channel_subscription) "
+                    "VALUES (%s, %s, False, False, False, False, False, 7, False, 0, False, True, "
+                    "%s, %s, False, False)", (id_chat, title, today, today))
         except Exception as e:
             await send_error('', str(e))
 
     async def save_new_title(self, id_chat, title):
         try:
             with self.connect:
-                self.cursor.execute('UPDATE settings SET title = %s WHERE id_chat = %s', (title, id_chat))
+                self.cursor.execute("UPDATE settings SET title = %s WHERE id_chat = %s", (title, id_chat))
         except Exception as e:
             await send_error('', str(e))
 
     async def migrate_to_chat_id(self, new_id_chat, id_chat):
         try:
             with self.connect:
-                self.cursor.execute('UPDATE chats SET id_chat = %s WHERE id_chat = %s', (new_id_chat, id_chat))
-                self.cursor.execute('UPDATE meetings SET id_chat = %s WHERE id_chat = %s', (new_id_chat, id_chat))
-                self.cursor.execute('UPDATE messages SET id_chat = %s WHERE id_chat = %s', (new_id_chat, id_chat))
-                self.cursor.execute('UPDATE settings SET id_chat = %s WHERE id_chat = %s', (new_id_chat, id_chat))
+                self.cursor.execute("UPDATE chats SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
+                self.cursor.execute("UPDATE meetings SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
+                self.cursor.execute("UPDATE messages SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
+                self.cursor.execute("UPDATE settings SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
         except Exception as e:
             await send_error('', str(e))
 
     async def save_or_update_new_title(self, id_chat, title):
         try:
-            with self.connect:
-                self.cursor.execute('SELECT id_chat FROM settings WHERE id_chat = %s', (id_chat,))
-                result = cursor.fetchone()
-                if result is None:
-                    await base.save_new_chat(id_chat, title)
-                else:
-                    self.cursor.execute('UPDATE settings SET enable_group = True, title = %s WHERE id_chat = %s',
+            self.cursor.execute("SELECT id_chat FROM settings WHERE id_chat = %s", (id_chat,))
+            result = self.cursor.fetchone()
+            if result is None:
+                await base.save_new_chat(id_chat, title)
+            else:
+                with self.connect:
+                    self.cursor.execute("UPDATE settings SET enable_group = True, title = %s WHERE id_chat = %s",
                                         (title, id_chat))
         except Exception as e:
             await send_error('', str(e))
@@ -87,7 +88,7 @@ class Database:
     async def save_chat_disable(self, id_chat):
         try:
             with self.connect:
-                self.cursor.execute('UPDATE settings SET enable_group = False WHERE id_chat = %s', (id_chat,))
+                self.cursor.execute("UPDATE settings SET enable_group = False WHERE id_chat = %s", (id_chat,))
         except Exception as e:
             await send_error('', str(e))
 
@@ -95,14 +96,15 @@ class Database:
         try:
             with self.connect:
                 self.cursor.execute(
-                    'UPDATE chats SET deleted = True, date_of_the_last_message = %s WHERE id_chat = %s AND id_user = %s',
+                    "UPDATE chats SET deleted = True, date_of_the_last_message = %s "
+                    "WHERE id_chat = %s AND id_user = %s",
                     (date_of_the_last_message, id_chat, id_user))
 
                 self.cursor.execute(
-                    'SELECT projects.channel_id FROM settings '
-                    'INNER JOIN projects ON settings.project_id = projects.project_id '
-                    'AND NOT projects.channel_id = 0 '
-                    'AND settings.id_chat = %s', (id_chat,))
+                    "SELECT projects.channel_id FROM settings "
+                    "INNER JOIN projects ON settings.project_id = projects.project_id "
+                    "AND NOT projects.channel_id = 0 "
+                    "AND settings.id_chat = %s", (id_chat,))
                 return self.cursor.fetchone()
         except Exception as e:
             await send_error('', str(e))
@@ -110,8 +112,8 @@ class Database:
     async def save_message_count(self, id_chat, id_user, date_of_the_last_message, characters, message_id):
         try:
             with self.connect:
-                self.cursor.execute('INSERT INTO messages (id_chat, id_user, date, characters, message_id) '
-                                    'VALUES (%s, %s, %s, %s, %s)',
+                self.cursor.execute("INSERT INTO messages (id_chat, id_user, date, characters, message_id) "
+                                    "VALUES (%s, %s, %s, %s, %s)",
                                     (id_chat, id_user, date_of_the_last_message, characters, message_id))
         except Exception as e:
             await send_error('', str(e))
@@ -131,34 +133,33 @@ class Database:
                 username = ''
 
             # id_user
-            self.cursor.execute('SELECT id_user FROM users WHERE id_user = %s', (id_user,))
+            self.cursor.execute("SELECT id_user FROM users WHERE id_user = %s", (id_user,))
             result = self.cursor.fetchone()
 
             if result is None:
-                today = datetime.datetime.now()
-                text = 'INSERT INTO users (id_user, first_name, last_name, username, language_code, ' \
-                       'registration_date, registration_field, fio, address, tel, mail, projects) ' \
-                       'VALUES (%s, %s, %s, %s, %s, %s, NULL, NULL, NULL, NULL, NULL, NULL)'
-                values = (id_user, first_name, last_name, username, language_code, today)
+                text = "INSERT INTO users (id_user, first_name, last_name, username, language_code, " \
+                       "registration_date, registration_field, fio, address, tel, mail, projects) " \
+                       "VALUES (%s, %s, %s, %s, %s, %s, NULL, NULL, NULL, NULL, NULL, NULL)"
+                values = (id_user, first_name, last_name, username, language_code, get_today())
             else:
-                text = 'UPDATE users SET first_name = %s, last_name = %s, username = %s, language_code = %s, ' \
-                       'registration_field = NULL, projects = NULL ' \
-                       'WHERE id_user = %s'
+                text = "UPDATE users SET first_name = %s, last_name = %s, username = %s, language_code = %s, " \
+                       "registration_field = NULL, projects = NULL " \
+                       "WHERE id_user = %s"
                 values = (first_name, last_name, username, language_code, id_user)
             self.cursor.execute(text, values)
 
             # chats
-            self.cursor.execute('SELECT id_chat FROM chats WHERE id_chat = %s AND id_user = %s', (id_chat, id_user))
+            self.cursor.execute("SELECT id_chat FROM chats WHERE id_chat = %s AND id_user = %s", (id_chat, id_user))
             result = self.cursor.fetchone()
 
             if result is None:
-                text = 'INSERT INTO chats (id_chat, id_user, messages, characters, ' \
-                       'deleted, date_of_the_last_message) VALUES (%s, %s, 1, %s, False, %s)'
+                text = "INSERT INTO chats (id_chat, id_user, messages, characters, " \
+                       "deleted, date_of_the_last_message) VALUES (%s, %s, 1, %s, False, %s)"
                 values = (id_chat, id_user, characters, date_of_the_last_message)
             else:
-                text = 'UPDATE chats SET messages = messages + 1, characters = characters + %s, deleted = False, ' \
-                       'date_of_the_last_message = %s ' \
-                       'WHERE id_chat = %s AND id_user = %s'
+                text = "UPDATE chats SET messages = messages + 1, characters = characters + %s, deleted = False, " \
+                       "date_of_the_last_message = %s " \
+                       "WHERE id_chat = %s AND id_user = %s"
                 values = (characters, date_of_the_last_message, id_chat, id_user)
 
             self.cursor.execute(text, values)
@@ -172,14 +173,14 @@ class Database:
             message_id = message.message_id
 
             with self.connect:
-                self.cursor.execute('UPDATE users SET menu_message_id = %s WHERE id_user = %s', (message_id, user_id))
+                self.cursor.execute("UPDATE users SET menu_message_id = %s WHERE id_user = %s", (message_id, user_id))
 
         except Exception as e:
             await send_error('', str(e))
 
     async def get_menu_message_id(self, user_id):
         try:
-            self.cursor.execute('SELECT coalesce(menu_message_id, 0) FROM users WHERE id_user = %s', (user_id,))
+            self.cursor.execute("SELECT coalesce(menu_message_id, 0) FROM users WHERE id_user = %s", (user_id,))
             result = self.cursor.fetchone()
 
             return result[0]

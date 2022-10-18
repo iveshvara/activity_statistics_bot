@@ -1,6 +1,15 @@
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from _settings import SUPER_ADMIN_ID
+import datetime
+
+
+def get_today(only_date=False):
+    if only_date:
+        result = datetime.date.today()
+    else:
+        result = datetime.datetime.today().replace(microsecond=0)
+    return result
 
 
 def its_admin(id_user, chat_admins):

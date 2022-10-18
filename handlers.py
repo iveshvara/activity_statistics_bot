@@ -48,17 +48,16 @@ async def command_start(message: Message):
     for i in meaning:
         try:
             chat_admins = await bot.get_chat_administrators(i[0])
+            qwe = 1
         except Exception as e:
             chat_admins = ()
 
         for ii in chat_admins:
-            qwe = 1
+            id_user = ii.user.id
+            cursor.execute("UPDATE users SET role = 'admin' WHERE id_user = %s", (id_user,))
+            connect.commit()
 
-        # cursor.execute(
-        #     'INSERT INTO users (id_user, first_name, last_name, username, language_code, registration_date, registration_field, message_id, gender, fio, birthdate, address, tel, mail, projects) '
-        #     'VALUES (%s, %s, %s, %s, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)',
-        #     (i[0], i[1], i[2], i[3]))
-        # connect.commit()
+    print('Ok')
 
 
 @dp.message_handler(commands=['get_stat'])
@@ -332,30 +331,14 @@ async def message_handler(message):
 
         elif message.content_type in created_title_content_type:
             title = shielding(message.chat.title)
-            # cursor.execute(
-            #     '''INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics,
-            #     sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters,
-            #     period_of_activity, report_enabled, project_id, curators_group, enable_group,
-            #     last_notify_date, last_notify_message_id_date,
-            #     do_not_output_name_from_registration, check_channel_subscription)
-            #     VALUES (%s, %s, False, False, False, False, False, 7, False, 0, False, True,
-            #     datetime("now"), datetime("now"), False, False)''', (id_chat, title))
-            # connect.commit()
             await base.save_new_chat(id_chat, title)
 
         elif message.content_type == 'new_chat_title':
             title = shielding(message.chat.title)
-            # cursor.execute('UPDATE settings SET title = %s WHERE id_chat = %s', (title, id_chat))
-            # connect.commit()
             await base.save_new_title(id_chat, title)
 
         elif message.content_type == 'migrate_to_chat_id':
             new_id_chat = message.migrate_to_chat_id
-            # cursor.execute('UPDATE chats SET id_chat = %s WHERE id_chat = %s', (new_id_chat, id_chat))
-            # cursor.execute('UPDATE meetings SET id_chat = %s WHERE id_chat = %s', (new_id_chat, id_chat))
-            # cursor.execute('UPDATE messages SET id_chat = %s WHERE id_chat = %s', (new_id_chat, id_chat))
-            # cursor.execute('UPDATE settings SET id_chat = %s WHERE id_chat = %s', (new_id_chat, id_chat))
-            # connect.commit()
             await base.migrate_to_chat_id(new_id_chat, id_chat)
 
         elif message.content_type == 'new_chat_members':
@@ -363,22 +346,6 @@ async def message_handler(message):
                 if i.is_bot:
                     if i.username == THIS_IS_BOT_NAME:
                         title = shielding(message.chat.title)
-
-                        # cursor.execute('SELECT * FROM settings WHERE id_chat = %s', (id_chat,))
-                        # meaning = cursor.fetchone()
-                        # if meaning is None:
-                        #     cursor.execute(
-                        #         '''INSERT INTO settings (id_chat, title, statistics_for_everyone,
-                        #         include_admins_in_statistics, sort_by_messages, do_not_output_the_number_of_messages,
-                        #         do_not_output_the_number_of_characters, period_of_activity, report_enabled, project_id,
-                        #         curators_group, enable_group, last_notify_date, last_notify_message_id_date,
-                        #         do_not_output_name_from_registration, check_channel_subscription)
-                        #         VALUES (%s, %s, False, False, False, False, False, 7, False, 0, False, True,
-                        #         datetime("now"), datetime("now"), False, False)''', (id_chat, title))
-                        # else:
-                        #     cursor.execute('UPDATE settings SET enable_group = True, title = %s WHERE id_chat = %s',
-                        #                    (title, id_chat))
-                        # connect.commit()
                         await base.save_or_update_new_title(id_chat, title)
 
                         text = f'Добавлена новая группа "{message.chat.title}"'
@@ -392,23 +359,10 @@ async def message_handler(message):
             i = message.left_chat_member
             if i.is_bot:
                 if i.username == THIS_IS_BOT_NAME:
-                    # cursor.execute('UPDATE settings SET enable_group = False WHERE id_chat = %s', (id_chat,))
-                    # connect.commit()
                     await base.save_chat_disable(id_chat)
 
             else:
                 i_id_user = i.id
-                # cursor.execute(
-                #     'UPDATE chats SET deleted = True, date_of_the_last_message = %s WHERE id_chat = %s AND id_user = %s',
-                #     (date_of_the_last_message, id_chat, id_user))
-                # connect.commit()
-                #
-                # cursor.execute(
-                #     '''SELECT projects.channel_id FROM settings
-                #     INNER JOIN projects ON settings.project_id = projects.project_id
-                #     AND NOT projects.channel_id = 0
-                #     AND settings.id_chat = %s''', (id_chat,))
-                # result = cursor.fetchone()
                 result = await base.save_user_disable_in_chat(id_chat, i_id_user, date_of_the_last_message)
                 if result is not None:
                     channel_id = result[0]
