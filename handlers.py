@@ -2,7 +2,7 @@
 from _settings import THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from bot import bot, dp, base, cursor, connect
 from main_functions import get_stat, get_start_menu, registration_process, registration_command, \
-    homework_process, homework_response, homework_kb
+    admin_homework_process, homework_process, homework_response, homework_kb
 from utility_functions import process_parameter_continuation, callback_edit_text, \
     message_answer, setting_up_a_chat, last_menu_message_delete
 from service import add_buttons_time_selection, its_admin, shielding
@@ -242,11 +242,43 @@ async def homework_functions(callback: CallbackQuery):
         await callback_edit_text(callback, text, inline_kb)
 
 
+@dp.callback_query_handler(lambda x: x.data and x.data.startswith('admin_homework '))
+async def admin_homework_functions(callback: CallbackQuery):
+    id_user_admin = callback.from_user.id
+    list_str = callback.data.split()
+    project_id = ''
+    if len(list_str) > 1:
+        project_id = int(list_str[1])
+    status = ''
+    if len(list_str) > 2:
+        status = list_str[2]
+    id_user = 0
+    if len(list_str) > 3:
+        id_user = int(list_str[3])
+    id_chat = 0
+    homework_date = ''
+    if len(list_str) > 4:
+        if status in ('text', 'response', 'feedback'):
+            homework_date = datetime.datetime.strptime(list_str[4], "%Y-%m-%d").date()
+        else:
+            id_chat = int(list_str[4])
+    message_id = callback.message.message_id
+
+    text, inline_kb, status = await admin_homework_process(project_id, id_user_admin, status, id_user, id_chat, homework_date)
+
+    if status == 'back':
+        await menu_back(callback)
+    elif status in ('homework', 'sending'):
+        pass
+    else:
+        await callback_edit_text(callback, text, inline_kb)
+
+
 @dp.chat_join_request_handler()
 async def join(update: ChatJoinRequest):
     id_user = update.from_user.id
     cursor.execute(
-        '''SELECT DISTINCT users.message_id, projects.name, projects.invite_link FROM chats
+        '''SELECT DISTINCT users.menu_message_id, projects.name, projects.invite_link FROM chats
             INNER JOIN settings ON chats.id_chat = settings.id_chat
             INNER JOIN users ON chats.id_user = users.id_user
             INNER JOIN projects ON settings.project_id = projects.project_id	

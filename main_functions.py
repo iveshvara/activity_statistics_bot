@@ -1,8 +1,8 @@
 
-from bot import bot, cursor, connect
+from bot import bot, cursor, connect, base, send_error
 from _settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID
-from service import its_admin, shielding, get_name_tg, reduce_large_numbers, get_today
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from service import its_admin, shielding, get_name_tg, reduce_large_numbers, get_today, message_requirements
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton as AddInlBtn
 # from aiogram.contrib.middlewares.logging import LoggingMiddleware
 import datetime
 
@@ -297,7 +297,7 @@ async def get_start_menu(id_user):
             text = 'Это бот для участников проектов https://ipdt.kz/proekty/. Присоединяйтесь!'
             text = shielding(text)
             inline_kb = InlineKeyboardMarkup(row_width=1)
-            inline_kb.add(InlineKeyboardButton(text='Перейти на сайт.', url='https://ipdt.kz/proekty/'))
+            inline_kb.add(AddInlBtn(text='Перейти на сайт.', url='https://ipdt.kz/proekty/'))
 
         else:
             text = 'Добрый день, дорогой друг! \n\n' \
@@ -305,7 +305,7 @@ async def get_start_menu(id_user):
                    'Для того, чтобы получить доступ к материалам, необходимо пройти небольшую регистрацию!'
             text = shielding(text)
             inline_kb = InlineKeyboardMarkup(row_width=1)
-            inline_kb.add(InlineKeyboardButton(text='Регистрация', callback_data='reg'))
+            inline_kb.add(AddInlBtn(text='Регистрация', callback_data='reg'))
 
     elif len(user_groups) == 1:
         one_group = user_groups[0][0]
@@ -313,7 +313,7 @@ async def get_start_menu(id_user):
     else:
         text = 'Выберете группу для настройки:'
         for i in user_groups:
-            inline_kb.add(InlineKeyboardButton(text=i[1], callback_data=f'id_chat {i[0]}'))
+            inline_kb.add(AddInlBtn(text=i[1], callback_data=f'id_chat {i[0]}'))
 
     cursor.execute(
         'SELECT projects.project_id, projects.name FROM project_administrators '
@@ -326,25 +326,23 @@ async def get_start_menu(id_user):
         cursor.execute('SELECT date FROM homework_text WHERE project_id = %s ORDER BY date DESC LIMIT 1', (project_id,))
         meaning_homework = cursor.fetchone()
         if meaning_homework is not None and not meaning_homework[0] in ('', None):
-            inline_kb.add(InlineKeyboardButton(text='Домашние работы',
-                                               callback_data=f'homework {project_id} text {meaning_homework[0]}'))
+            admin = await base.its_admin(id_user)
+            if admin:
+                callback_data = f'admin_homework {project_id}'
+            else:
+                callback_data = f'homework {project_id} text {meaning_homework[0]}'
+            inline_kb.add(AddInlBtn(text='Домашние работы', callback_data=callback_data))
 
-        inline_kb.add(InlineKeyboardButton(text='[Рассылка по "' + meaning[1] + '"]',
-                                           callback_data='homework ' + project_id))
+        inline_kb.add(AddInlBtn(text='[Рассылка по "' + meaning[1] + '"]',
+                                callback_data='homework ' + project_id))
 
     if id_user == SUPER_ADMIN_ID:
-        inline_kb.add(InlineKeyboardButton(text='[super admin functions]', callback_data='super_admin '))
+        inline_kb.add(AddInlBtn(text='[super admin functions]', callback_data='super_admin '))
 
     return text, inline_kb, one_group
 
 
 async def homework_kb(project_id, id_user, homework_date=None, status='text'):
-    inline_kb = await homework_kb_student(project_id, id_user, homework_date, status)
-
-    return inline_kb
-
-
-async def homework_kb_student(project_id, id_user, homework_date, status='text'):
     text_text = 'Задание'
     text_response = 'Ваш ответ'
     text_feedback = 'Отклик куратора'
@@ -360,9 +358,9 @@ async def homework_kb_student(project_id, id_user, homework_date, status='text')
 
     inline_kb = InlineKeyboardMarkup(row_width=1)
     inline_kb.row(
-        InlineKeyboardButton(text=text_text, callback_data=f'homework {project_id} text {homework_date_text}'),
-        InlineKeyboardButton(text=text_response, callback_data=f'homework {project_id} response {homework_date_text}'),
-        InlineKeyboardButton(text=text_feedback, callback_data=f'homework {project_id} feedback {homework_date_text}')
+        AddInlBtn(text=text_text, callback_data=f'homework {project_id} text {homework_date_text}'),
+        AddInlBtn(text=text_response, callback_data=f'homework {project_id} response {homework_date_text}'),
+        AddInlBtn(text=text_feedback, callback_data=f'homework {project_id} feedback {homework_date_text}')
     )
 
     cursor.execute('UPDATE homework_check SET selected = False WHERE project_id = %s AND id_user = %s',
@@ -387,23 +385,161 @@ async def homework_kb_student(project_id, id_user, homework_date, status='text')
         #     if accepted:
         #         current = '✅'
 
-        inline_kb.add(InlineKeyboardButton(
+        inline_kb.add(AddInlBtn(
             text=icon + ' ' + date.strftime("%d.%m.%Y") + ' — ' + homework_status,
             callback_data=f'homework {project_id} {status} {date}'))
 
-    inline_kb.add(InlineKeyboardButton(text='Назад', callback_data=f'homework {project_id} back'))
+    inline_kb.add(AddInlBtn(text='Назад', callback_data=f'homework {project_id} back'))
 
     return inline_kb
+
+
+async def homework_admin(project_id, id_user, homework_date, status='text'):
+   pass
+
+
+async def homework_kb_admin(project_id, id_user, homework_date, status='text'):
+    text_text = 'Задание'
+    text_response = 'Ответ студента'
+    text_feedback = 'Ваш ответ'
+
+    if status == 'text':
+        text_text = '⭕ ' + text_text
+    elif status == 'response':
+        text_response = '⭕ ' + text_response
+    elif status == 'feedback':
+        text_feedback = '⭕ ' + text_feedback
+
+    homework_date_text = homework_date.strftime("%Y-%m-%d")
+
+    inline_kb = InlineKeyboardMarkup(row_width=1)
+    inline_kb.row(
+        AddInlBtn(text=text_text, callback_data=f'admin_homework {project_id} text {id_user} {homework_date_text}'),
+        AddInlBtn(text=text_response, callback_data=f'admin_homework {project_id} response {id_user} {homework_date_text}'),
+        AddInlBtn(text=text_feedback, callback_data=f'admin_homework {project_id} feedback {id_user} {homework_date_text}')
+    )
+    inline_kb.row(
+        AddInlBtn(text='✅ Принять', callback_data=f'admin_homework {project_id} accept {id_user} {homework_date_text}'),
+        AddInlBtn(text='❌ Вернуть', callback_data=f'admin_homework {project_id} return {id_user} {homework_date_text}')
+    )
+
+    # cursor.execute('UPDATE homework_check SET selected = False WHERE project_id = %s AND id_user = %s',
+    #                (project_id, id_user))
+    # cursor.execute('UPDATE homework_check SET selected = True WHERE project_id = %s AND id_user = %s AND date = %s',
+    #                (project_id, id_user, homework_date))
+    # connect.commit()
+
+    cursor.execute('SELECT date, status, accepted FROM homework_check WHERE project_id = %s AND id_user = %s',
+                   (project_id, id_user))
+    result = cursor.fetchall()
+    for i in result:
+        date = i[0]
+        homework_status = i[1]
+        accepted = i[2]
+
+        icon = ''
+        if homework_date == date:
+            icon = '🔴'
+
+        inline_kb.add(AddInlBtn(
+            text=icon + ' ' + date.strftime("%d.%m.%Y") + ' — ' + homework_status,
+            callback_data=f'admin_homework {project_id} {status} {id_user} {date}'))
+
+    inline_kb.row(
+        AddInlBtn(text='Выбрать студента', callback_data=f'admin_homework {project_id} student {homework_date_text}'),
+        AddInlBtn(text='Выбрать группу', callback_data=f'admin_homework {project_id} group {homework_date_text}'))
+    inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} back'))
+
+    return inline_kb
+
+
+async def admin_homework_process(project_id, id_user_admin, status, id_user, id_chat, homework_date=None):
+    text, inline_kb = '', InlineKeyboardMarkup(row_width=1)
+    if status == '':
+        chats = await base.get_chats_admin_user(project_id, id_user_admin)
+        number_of_chats = len(chats)
+
+        if number_of_chats == 0:
+            await send_error(f'Пришло количество чатов 0 из base.get_chats_admin_user, где project_id {project_id}, id_user {id_user_admin}','')
+            text = 'У вас нет чатов'
+
+            return text, inline_kb
+
+        elif number_of_chats > 1:
+            inline_kb.add(
+                AddInlBtn(text='Выбрать группу', callback_data=f'admin_homework {project_id} group'))
+
+        current_chat = chats[0]
+        id_chat = current_chat[0]
+        title = current_chat[1]
+        users = await base.get_users_in_chats(project_id, id_chat)
+        all_users = len(users)
+        # row_counter = 0
+        counter_users = 0
+        counter_homeworks = 0
+        text = title + '\n'
+
+        for i in users:
+            i_id_user = i[0]
+            i_first_name = i[1]
+            i_last_name = i[2]
+            i_username = i[3]
+            i_fio = i[4]
+            i_count = i[5]
+
+            if i_count > 0:
+                counter_users +=1
+                counter_homeworks += i_count
+
+            if i_fio is None:
+                text_btn = i_first_name
+                if i_last_name is not None:
+                    text_btn += ' ' + i_last_name
+            else:
+                text_btn = i_fio
+            text_btn += ' ' + str(i_count)
+
+            callback_data = f'admin_homework {project_id} text {i_id_user} {homework_date}'
+            inline_kb.add(AddInlBtn(text=text_btn, callback_data=callback_data))
+
+            # row_counter += 1
+            # text += '\n' + str(row_counter) + '\. ' + text_btn
+
+        inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} back'))
+
+        text += f'\nВсего домашних заданий к проверке: {counter_homeworks}'
+        text += f'\nСтудентов, сделавших домашние задания: {counter_users}'
+        text += f'\nСтудентов, не сделавших домашние задания: {all_users - counter_users}'
+
+    if status in ('text', 'response', 'feedback'):
+        # homework_date = await base.get_date_last_homework(project_id)
+        # if homework_date is not None:
+        inline_kb = await homework_kb_admin(project_id, id_user, homework_date, status)
+        status_meaning, accepted, response_is_filled = \
+            await base.get_date_status_meaning_homework(status, project_id, homework_date, id_user)
+        if status_meaning in ('', None):
+            text = 'Нет данных'
+            if status == 'response':
+                text = 'Студент еще не выполнил домашнее задание.'
+            if status == 'feedback':
+                if accepted:
+                    text = 'Вы уже приняли это домашнее задание.'
+                elif response_is_filled:
+                    text = 'Вы еще не проверили это домашнее задание. Для того, чтобы оставить отклик на домашнее задание — пришлите сообщение в ответ.'
+                    text += message_requirements()
+                else:
+                    text = 'Пока рано откликаться, студент еще не выполнил домашнее задание.'
+        else:
+            text = status_meaning
+
+        text = shielding(text)
+
+    return text, inline_kb, status
 
 
 async def homework_process(project_id, id_user, status, homework_date, message_text=''):
     text = ''
     inline_kb = InlineKeyboardMarkup(row_width=1)
-    message_requirements = \
-        '\nТребования к сообщению:\n' \
-        '— Можно использовать эмодзи и ссылки в открытом виде.\n' \
-        '— Нельзя использовать форматирование. Введенное форматирование будет утеряно.\n' \
-        '— Текст должен помещаться в одно сообщение Telegram (не больше 4096 символов).'
 
     if status == '':
         cursor.execute(
@@ -414,9 +550,9 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
         meaning = cursor.fetchone()
 
         text = f'Введите текст сообщения, который бот отправит всем студентам всех групп проекта "{meaning[0]}". '
-        text += message_requirements
+        text += message_requirements()
         text = shielding(text)
-        inline_kb.add(InlineKeyboardButton(text='Отмена', callback_data=f'homework {project_id} back'))
+        inline_kb.add(AddInlBtn(text='Отмена', callback_data=f'homework {project_id} back'))
 
         cursor.execute(
             'UPDATE project_administrators SET status = %s, message_id = %s WHERE project_id = %s AND id_user = %s',
@@ -439,9 +575,9 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
         if meaning is not None:
             await bot.delete_message(id_user, meaning[0])
             text = shielding(message_text)
-            inline_kb.add(InlineKeyboardButton(text='Отправить как домашнее задание', callback_data=f'homework {project_id} homework'))
-            inline_kb.add(InlineKeyboardButton(text='Отправить как рассылку', callback_data=f'homework {project_id} sending'))
-            inline_kb.add(InlineKeyboardButton(text='Отмена', callback_data=f'homework {project_id} back'))
+            inline_kb.add(AddInlBtn(text='Отправить как домашнее задание', callback_data=f'homework {project_id} homework'))
+            inline_kb.add(AddInlBtn(text='Отправить как рассылку', callback_data=f'homework {project_id} sending'))
+            inline_kb.add(AddInlBtn(text='Отмена', callback_data=f'homework {project_id} back'))
 
     elif status in ('homework', 'sending'):
         date = None
@@ -452,7 +588,7 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
             # meaning = cursor.fetchone()
             # if meaning is not None:
             #     text = 'Можно отправить только одно домашнее задание в день\.'
-            #     inline_kb.add(InlineKeyboardButton(text='Ok', callback_data=f'homework {project_id} back'))
+            #     inline_kb.add(AddInlBtn(text='Ok', callback_data=f'homework {project_id} back'))
             #     return text, inline_kb, ''
 
         cursor.execute('SELECT text FROM project_administrators WHERE id_user = %s AND project_id = %s',
@@ -533,23 +669,28 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
         connect.commit()
 
     elif status == 'text':
-        cursor.execute('SELECT text FROM homework_text WHERE project_id = %s AND date = %s',
-                       (project_id, homework_date))
-        text = shielding(cursor.fetchone()[0])
+        # cursor.execute('SELECT text FROM homework_text WHERE project_id = %s AND date = %s',
+        #                (project_id, homework_date))
+        # text = shielding(cursor.fetchone()[0])
+        status_meaning, accepted, response_is_filled = \
+            await base.get_date_status_meaning_homework(status, project_id, homework_date, id_user)
+        text = shielding(status_meaning)
         inline_kb = await homework_kb(project_id, id_user, homework_date, status)
 
     elif status in ('response', 'feedback'):
-        cursor.execute(
-            f'SELECT {status}, accepted, NOT response = NULL FROM homework_check '
-            'WHERE project_id = %s AND date = %s AND id_user = %s', (project_id, homework_date, id_user))
-        result = cursor.fetchone()
-        status_meaning = result[0]
-        accepted = bool(result[1])
-        response_is_filled = bool(result[2])
+        # cursor.execute(
+        #     f'SELECT {status}, accepted, NOT response = NULL FROM homework_check '
+        #     'WHERE project_id = %s AND date = %s AND id_user = %s', (project_id, homework_date, id_user))
+        # result = cursor.fetchone()
+        # status_meaning = result[0]
+        # accepted = bool(result[1])
+        # response_is_filled = bool(result[2])
+        status_meaning, accepted, response_is_filled = \
+            await base.get_date_status_meaning_homework(status, project_id, homework_date, id_user)
         if status_meaning in ('', None):
             if status == 'response':
                 text = 'Для того, чтобы выполнить домашнее задание — пришлите ответ сообщением.'
-                text += message_requirements
+                text += message_requirements()
             if status == 'feedback':
                 if accepted:
                     text = 'Ваше домашнее задание принято.'
@@ -641,8 +782,8 @@ async def registration_process(message: Message, meaning='', its_callback=False)
     if registration_field == '':
         new_registration_field = 'gender'
         text = 'Шаг 1 из 7. \nВаш пол:'
-        inline_kb.add(InlineKeyboardButton(text='Мужской', callback_data='gender Мужской'))
-        inline_kb.add(InlineKeyboardButton(text='Женский', callback_data='gender Женский'))
+        inline_kb.add(AddInlBtn(text='Мужской', callback_data='gender Мужской'))
+        inline_kb.add(AddInlBtn(text='Женский', callback_data='gender Женский'))
 
     elif registration_field == 'gender':
         if its_callback:
@@ -703,7 +844,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
         new_registration_field = 'done'
 
         inline_kb = InlineKeyboardMarkup(row_width=1)
-        inline_kb.add(InlineKeyboardButton('Заявка на вступление', url=invite_link))
+        inline_kb.add(AddInlBtn('Заявка на вступление', url=invite_link))
         text = 'Шаг 7 из 7. \nУчебные материалы будут выкладываться в канал. Подайте заявку на вступление (будет принята автоматически).'
 
     # elif registration_field == 'projects':
@@ -743,7 +884,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
     #             # invite_link = result.invite_link
     # 
     #             inline_kb = InlineKeyboardMarkup(row_width=1)
-    #             inline_kb.add(InlineKeyboardButton('Заявка на вступление', url=invite_link))
+    #             inline_kb.add(AddInlBtn('Заявка на вступление', url=invite_link))
     # 
     #             text = 'Шаг 8 из 7. \nУчебные материалы будут выкладываться в канал. Подайте заявку на вступление (будет принята автоматически).'
     #     else:

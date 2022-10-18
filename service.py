@@ -148,3 +148,11 @@ def align_by_number_of_characters(number, number_of_characters):
         text_result = ' ' + text_result
 
     return text_result
+
+
+def message_requirements():
+    return \
+        '\nТребования к сообщению:\n' \
+        '— Можно использовать эмодзи и ссылки в открытом виде.\n' \
+        '— Нельзя использовать форматирование. Введенное форматирование будет утеряно.\n' \
+        '— Текст должен помещаться в одно сообщение Telegram (не больше 4096 символов).'

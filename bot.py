@@ -184,7 +184,85 @@ class Database:
             result = self.cursor.fetchone()
 
             return result[0]
-        
+
+        except Exception as e:
+            await send_error('', str(e))
+
+    async def its_admin(self, user_id):
+        try:
+            self.cursor.execute("SELECT role = 'admin' FROM users WHERE id_user = %s", (user_id,))
+            result = self.cursor.fetchone()
+
+            return result[0]
+
+        except Exception as e:
+            await send_error('', str(e))
+
+    async def get_chats_admin_user(self, project_id, user_id):
+        try:
+            self.cursor.execute(
+                "SELECT chats.id_chat, settings.title FROM users "
+                "INNER JOIN chats ON users.id_user = chats.id_user AND NOT chats.deleted "
+                "INNER JOIN settings ON chats.id_chat = settings.id_chat AND settings.enable_group "
+                "AND NOT settings.curators_group AND settings.project_id = %s "
+                "WHERE users.id_user = %s", (project_id, user_id))
+            result = self.cursor.fetchall()
+
+            return result
+
+        except Exception as e:
+            await send_error('', str(e))
+
+    async def get_users_in_chats(self, project_id, id_chat):
+        try:
+            self.cursor.execute(
+                "SELECT chats.id_user, users.first_name, users.last_name, users.username, users.fio, COUNT(homework_check.id_user) FROM users "
+                "INNER JOIN chats ON users.id_user = chats.id_user AND NOT chats.deleted AND users.role = 'user' "
+                "LEFT JOIN homework_check ON homework_check.project_id = %s AND homework_check.id_user = chats.id_user AND homework_check.status = 'На проверке' "
+                "WHERE chats.id_chat = %s "
+                "GROUP BY chats.id_user, users.first_name, users.last_name, users.username, users.fio", (project_id, id_chat))
+            result = self.cursor.fetchall()
+
+            return result
+
+        except Exception as e:
+            await send_error('', str(e))
+
+    async def get_date_last_homework(self, project_id):
+        try:
+            homework_date = None
+            self.cursor.execute("SELECT date FROM homework_text WHERE project_id = %s ORDER BY date DESC LIMIT 1", (project_id,))
+            result = self.cursor.fetchone()
+            if result is not None and not result[0] in ('', None):
+                homework_date = result[0]
+
+            return homework_date
+
+        except Exception as e:
+            await send_error('', str(e))
+
+    async def get_date_status_meaning_homework(self, status, project_id, homework_date, id_user=None):
+        try:
+            status_meaning = ''
+            accepted = False
+            status_is_filled = False
+
+            if status == 'text':
+                self.cursor.execute('SELECT text FROM homework_text WHERE project_id = %s AND date = %s',
+                               (project_id, homework_date))
+                status_meaning = self.cursor.fetchone()[0]
+
+            elif status in ('response', 'feedback'):
+                self.cursor.execute(
+                    f'SELECT {status}, accepted, NOT response IS NULL FROM homework_check '
+                    'WHERE project_id = %s AND date = %s AND id_user = %s', (project_id, homework_date, id_user))
+                result = self.cursor.fetchone()
+                status_meaning = result[0]
+                accepted = bool(result[1])
+                status_is_filled = bool(result[2])
+
+            return status_meaning, accepted, status_is_filled
+
         except Exception as e:
             await send_error('', str(e))
 
