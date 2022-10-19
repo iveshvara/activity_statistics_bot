@@ -111,8 +111,7 @@ async def process_parameter(callback: CallbackQuery):
 
     elif parameter_name == 'project_name':
         text = shielding('Выберете ваш проект:')
-        cursor.execute('SELECT project_id, name FROM projects')
-        projects_tuple = cursor.fetchall()
+        projects_tuple = await base.get_all_projects()
 
         inline_kb = InlineKeyboardMarkup(row_width=1)
         for i in projects_tuple:
@@ -160,6 +159,11 @@ async def reg_command_message(message: Message):
     await registration_command(message)
 
 
+@dp.callback_query_handler(text='-')
+async def skip_action(callback: CallbackQuery):
+    await callback.answer()
+
+
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('gender ') or x.data.startswith('projects '))
 async def gender_processing(callback: CallbackQuery):
     await callback.answer()
@@ -183,8 +187,7 @@ async def super_admin_functions(callback: CallbackQuery):
 
     if project_id == '' and id_chat == '':
         text = shielding('Выберете ваш проект:')
-        cursor.execute('SELECT project_id, name FROM projects')
-        projects_tuple = cursor.fetchall()
+        projects_tuple = await base.get_all_projects()
 
         inline_kb = InlineKeyboardMarkup(row_width=1)
         for i in projects_tuple:
@@ -198,12 +201,8 @@ async def super_admin_functions(callback: CallbackQuery):
 
     elif id_chat == '':
         inline_kb = InlineKeyboardMarkup(row_width=1)
-        cursor.execute(
-            '''SELECT DISTINCT settings.id_chat, settings.title FROM settings
-            LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat 
-            WHERE settings.enable_group AND project_id = %s''', (project_id,))
-        meaning = cursor.fetchall()
-        for i in meaning:
+        result = await base.get_chats_in_project(project_id)
+        for i in result:
             title_result = i[1].replace('\\', '')
             inline_kb.add(InlineKeyboardButton(text=title_result, callback_data=f'super_admin {project_id} {i[0]}'))
         inline_kb.add(InlineKeyboardButton(text='Назад', callback_data='super_admin '))
@@ -258,10 +257,11 @@ async def admin_homework_functions(callback: CallbackQuery):
     id_chat = 0
     homework_date = ''
     if len(list_str) > 4:
-        if status in ('text', 'response', 'feedback'):
-            homework_date = datetime.datetime.strptime(list_str[4], "%Y-%m-%d").date()
-        else:
-            id_chat = int(list_str[4])
+        homework_date = datetime.datetime.strptime(list_str[4], "%Y-%m-%d").date()
+        # if status in ('text', 'response', 'feedback'):
+        #     homework_date = datetime.datetime.strptime(list_str[4], "%Y-%m-%d").date()
+        # else:
+        #     id_chat = int(list_str[4])
     message_id = callback.message.message_id
 
     text, inline_kb, status = await admin_homework_process(project_id, id_user_admin, status, id_user, id_chat, homework_date)
@@ -277,26 +277,20 @@ async def admin_homework_functions(callback: CallbackQuery):
 @dp.chat_join_request_handler()
 async def join(update: ChatJoinRequest):
     id_user = update.from_user.id
-    cursor.execute(
-        '''SELECT DISTINCT users.menu_message_id, projects.name, projects.invite_link FROM chats
-            INNER JOIN settings ON chats.id_chat = settings.id_chat
-            INNER JOIN users ON chats.id_user = users.id_user
-            INNER JOIN projects ON settings.project_id = projects.project_id	
-            WHERE settings.enable_group AND chats.id_user = %s''', (id_user,))
-    meaning = cursor.fetchone()
+    result = await base.application_for_membership(id_user)
 
     inline_kb = InlineKeyboardMarkup(row_width=1)
 
-    if meaning is None:
+    if result is None:
         await update.decline()
         text = 'Заявка на вступление отклонена. Свяжитесь с вашим куратором для решения этой ситуации.'
     else:
         await update.approve()
         text = 'Все получилось! \nПоздравляем Вас с успешной регистрацией! \n' \
                'Ваша заявка подтверждена на вступление подтверждена, пожалуйста заходите.'
-        inline_kb.add(InlineKeyboardButton('Зайти в канал.', url=meaning[2]))
+        inline_kb.add(InlineKeyboardButton('Зайти в канал.', url=result[2]))
         try:
-            await bot.delete_message(chat_id=id_user, message_id=meaning[0])
+            await bot.delete_message(chat_id=id_user, message_id=result[0])
         except Exception as e:
             pass
 
@@ -314,17 +308,11 @@ async def message_handler(message):
 
         text = message.text
 
-        cursor.execute(
-            f'''SELECT 
-            coalesce((SELECT True FROM users WHERE id_user = {id_user} AND NOT registration_field = 'done'), False),
-            coalesce((SELECT project_id FROM project_administrators WHERE id_user = {id_user} AND status = 'text'), 0), 
-            coalesce((SELECT project_id FROM homework_check WHERE id_user = {id_user} AND accepted = False AND selected = True), 0),
-            (SELECT date FROM homework_check WHERE id_user = {id_user} AND accepted = False AND selected = True)''')
-        meaning = cursor.fetchone()
-        registration = meaning[0]
-        project_administrators_project_id = meaning[1]
-        homework_project_id = meaning[2]
-        homework_date = meaning[3]
+        result = await base.which_menu_to_show(id_user)
+        registration = result[0]
+        project_administrators_project_id = result[1]
+        homework_project_id = result[2]
+        homework_date = result[3]
 
         if registration:
             await registration_process(message, text, False)

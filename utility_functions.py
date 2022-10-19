@@ -3,6 +3,7 @@ from bot import bot, cursor, connect, base, send_error
 from service import convert_bool, convert_bool_binary
 from main_functions import get_stat
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+import traceback
 
 
 async def callback_edit_text(callback: CallbackQuery, text, inline_kb):
@@ -17,7 +18,7 @@ async def message_edit_text(message: Message, text, inline_kb):
             reply_markup=inline_kb,
             disable_web_page_preview=True)
     except Exception as e:
-        await send_error(text, str(e))
+        await send_error('', str(e), traceback.format_exc())
 
 
 async def message_answer(message: Message, text, inline_kb=None):
@@ -37,7 +38,7 @@ async def message_answer(message: Message, text, inline_kb=None):
             await base.save_menu_message_id(new_message)
 
     except Exception as e:
-        await send_error(text, str(e))
+        await send_error('', str(e), traceback.format_exc())
 
 
 async def last_menu_message_delete(id_user):
