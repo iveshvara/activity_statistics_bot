@@ -1,5 +1,5 @@
 from _settings import TOKEN, SKIP_ERROR_TEXT, THIS_IS_BOT_NAME, LOGS_CHANNEL_ID
-from service import get_today
+from service import get_today, get_name_tg, shielding
 from aiogram import Bot
 from aiogram.dispatcher import Dispatcher
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -245,7 +245,7 @@ class Database:
         except Exception as e:
             await send_error('', str(e), traceback.format_exc())
 
-    async def get_chats_admin_user(self, project_id, id_user):
+    async def get_chats_admin_user(self, project_id, id_user, id_chat):
         try:
             self.cursor.execute(
                 """SELECT 
@@ -261,7 +261,8 @@ class Database:
                             AND NOT settings.curators_group 
                             AND settings.project_id = %s 
                 WHERE 
-                    users.id_user = %s""", (project_id, id_user))
+                    users.id_user = %s
+                        AND (%s OR chats.id_chat = %s)""", (project_id, id_user, id_chat == 0, id_chat))
             result = self.cursor.fetchall()
 
             return result
@@ -295,7 +296,9 @@ class Database:
                     users.first_name, 
                     users.last_name, 
                     users.username, 
-                    users.fio""", (project_id, id_chat))
+                    users.fio
+                ORDER BY
+                    COUNT(homework_check.id_user) DESC""", (project_id, id_chat))
             result = self.cursor.fetchall()
 
             return result
@@ -322,6 +325,7 @@ class Database:
             status_meaning = ''
             accepted = False
             status_is_filled = False
+            user_info = ''
 
             if status == 'text' and id_user is None:
                 self.cursor.execute("SELECT text FROM homework_text WHERE project_id = %s AND date = %s",
@@ -343,9 +347,10 @@ class Database:
                             AND homework_check.id_user = %s""",
                     (project_id, homework_date, id_user))
                 result = self.cursor.fetchone()
-                status_meaning = result[0]
-                accepted = bool(result[1])
-                status_is_filled = bool(result[2])
+                if result is not None:
+                    status_meaning = result[0]
+                    accepted = bool(result[1])
+                    status_is_filled = bool(result[2])
 
             elif status in ('response', 'feedback'):
                 self.cursor.execute(
@@ -359,11 +364,18 @@ class Database:
                             AND date = %s 
                             AND id_user = %s""", (project_id, homework_date, id_user))
                 result = self.cursor.fetchone()
-                status_meaning = result[0]
-                accepted = bool(result[1])
-                status_is_filled = bool(result[2])
+                if result is not None:
+                    status_meaning = result[0]
+                    accepted = bool(result[1])
+                    status_is_filled = bool(result[2])
 
-            return status_meaning, accepted, status_is_filled
+            if id_user is not None:
+                first_name, last_name, username, fio, title = await base.get_user_info(id_user)
+                user_info = shielding(title.replace('\\', '')) + '\n'
+                user_info += await get_name_tg(id_user, first_name, last_name, username, fio)
+                user_info += '\n\n'
+
+            return status_meaning, accepted, status_is_filled, user_info
 
         except Exception as e:
             await send_error('', str(e), traceback.format_exc())
@@ -423,37 +435,42 @@ class Database:
 
     async def which_menu_to_show(self, id_user):
         try:
+            answer_text, project_id, homework_date, homework_id_user = '', None, None, None
+
             self.cursor.execute(
-                f"""SELECT "
-                coalesce((SELECT 
-                        True 
-                    FROM users 
-                    WHERE 
-                        id_user = {id_user} 
-                            AND NOT registration_field = 'done'), False), 
-                coalesce((SELECT 
-                        project_id 
-                    FROM project_administrators 
-                        WHERE 
-                            id_user = {id_user} 
-                                AND status = 'text'), 0), 
-                coalesce((SELECT 
-                        project_id 
-                    FROM homework_check 
-                    WHERE 
-                        id_user = {id_user} 
-                            AND NOT status = 'Принято' 
-                            AND selected = True), 0), 
-                (SELECT 
-                    date 
-                FROM homework_check 
-                WHERE 
-                    id_user = {id_user} 
-                        AND NOT status = 'Принято' 
-                        AND selected = True)""")
+                f"""SELECT 
+                --registration
+                coalesce((SELECT True FROM users WHERE id_user = {id_user} AND NOT registration_field = 'done'), False), 
+                
+                --homework_text
+                coalesce((SELECT project_id FROM project_administrators WHERE id_user = {id_user} AND status = 'text'), 0), 
+                
+                --homework_feedback
+                coalesce((SELECT project_id FROM homework_check WHERE admin_id = {id_user} AND NOT response IS NULL), 0), 
+                (SELECT date FROM homework_check WHERE admin_id = {id_user} AND NOT response IS NULL), 
+                (SELECT id_user FROM homework_check WHERE admin_id = {id_user} AND NOT response IS NULL), 
+                
+                --homework_response
+                coalesce((SELECT project_id FROM homework_check WHERE id_user = {id_user} AND NOT status = 'Принято' AND selected = True), 0), 
+                (SELECT date FROM homework_check WHERE id_user = {id_user} AND NOT status = 'Принято' AND selected = True)""")
             result = self.cursor.fetchone()
 
-            return result
+            if result[0]:
+                answer_text = 'registration'
+            elif result[1] > 0:
+                answer_text = 'homework_text'
+                project_id = result[1]
+            elif result[2] > 0:
+                answer_text = 'homework_feedback'
+                project_id = result[2]
+                homework_date = result[3]
+                homework_id_user = result[4]
+            elif result[5] > 0:
+                answer_text = 'homework_response'
+                project_id = result[5]
+                homework_date = result[6]
+
+            return answer_text, project_id, homework_date, homework_id_user
 
         except Exception as e:
             await send_error('', str(e), traceback.format_exc())
@@ -470,6 +487,60 @@ class Database:
                     """UPDATE homework_check SET status = %s, date_actual = %s 
                     WHERE project_id = %s AND date = %s AND id_user = %s""",
                     (status, date_actual, project_id, date, id_user))
+
+        except Exception as e:
+            await send_error('', str(e), traceback.format_exc())
+
+    async def set_admin_homework(self, project_id, date, id_user, id_user_admin):
+        try:
+            with self.connect:
+                self.cursor.execute(
+                    "UPDATE homework_check SET admin_id = NULL WHERE project_id = %s",
+                    (project_id,))
+                self.cursor.execute(
+                    "UPDATE homework_check SET admin_id = %s WHERE project_id = %s AND date = %s AND id_user = %s",
+                    (id_user_admin, project_id, date, id_user))
+
+        except Exception as e:
+            await send_error('', str(e), traceback.format_exc())
+
+    async def set_homework_feedback(self, project_id, homework_date, id_user, feedback, feedback_author_id):
+        try:
+            with self.connect:
+                self.cursor.execute(
+                    """UPDATE homework_check SET feedback = %s, feedback_author_id = %s 
+                    WHERE project_id = %s AND date = %s AND id_user = %s""",
+                    (feedback, feedback_author_id, project_id, homework_date, id_user))
+
+        except Exception as e:
+            await send_error('', str(e), traceback.format_exc())
+
+    async def get_user_info(self, id_user):
+        try:
+            self.cursor.execute(
+                """SELECT 
+                    users.first_name, 
+                    coalesce(users.last_name, ''), 
+                    coalesce(users.username, ''), 
+                    users.fio, 
+                    settings.title 
+                FROM users 
+                INNER JOIN chats 
+                    ON users.id_user = %s 
+                    AND users.id_user = chats.id_user 
+                INNER JOIN settings 
+                    ON chats.id_chat = settings.id_chat 
+                    AND settings.enable_group 
+                    AND NOT settings.curators_group""", (id_user,))
+            result = self.cursor.fetchone()
+
+            first_name = result[0]
+            last_name = result[1]
+            username = result[2]
+            fio = result[3]
+            title = result[4]
+
+            return first_name, last_name, username, fio, title
 
         except Exception as e:
             await send_error('', str(e), traceback.format_exc())

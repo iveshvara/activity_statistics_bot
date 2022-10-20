@@ -255,21 +255,18 @@ async def admin_homework_functions(callback: CallbackQuery):
     if len(list_str) > 3:
         id_user = int(list_str[3])
     id_chat = 0
-    homework_date = ''
     if len(list_str) > 4:
-        homework_date = datetime.datetime.strptime(list_str[4], "%Y-%m-%d").date()
-        # if status in ('text', 'response', 'feedback'):
-        #     homework_date = datetime.datetime.strptime(list_str[4], "%Y-%m-%d").date()
-        # else:
-        #     id_chat = int(list_str[4])
-    message_id = callback.message.message_id
+        id_chat = int(list_str[4])
+    homework_date = ''
+    if len(list_str) > 5:
+        homework_date = datetime.datetime.strptime(list_str[5], "%Y-%m-%d").date()
 
-    text, inline_kb, status = await admin_homework_process(project_id, id_user_admin, status, id_user, id_chat, homework_date)
+    text, user_info, inline_kb, status = \
+        await admin_homework_process(project_id, id_user_admin, status, id_user, id_chat, homework_date)
+    text = user_info + shielding(text)
 
-    if status == 'back':
+    if status == 'back_menu_back':
         await menu_back(callback)
-    elif status in ('homework', 'sending'):
-        pass
     else:
         await callback_edit_text(callback, text, inline_kb)
 
@@ -308,25 +305,44 @@ async def message_handler(message):
 
         text = message.text
 
-        result = await base.which_menu_to_show(id_user)
-        registration = result[0]
-        project_administrators_project_id = result[1]
-        homework_project_id = result[2]
-        homework_date = result[3]
+        answer_text, project_id, homework_date, homework_id_user = await base.which_menu_to_show(id_user)
 
-        if registration:
+        if answer_text == 'registration':
             await registration_process(message, text, False)
 
-        elif project_administrators_project_id > 0:
+        elif answer_text == 'homework_text':
             await message.delete()
 
-            text, inline_kb, status = await homework_process(project_administrators_project_id, id_user, 'confirm', '', text)
+            text, inline_kb, status = await homework_process(project_id, id_user, 'confirm', '', text)
             await message_answer(message, text, inline_kb)
 
-        elif homework_project_id > 0:
+        elif answer_text == 'homework_feedback':
+            await message.delete()
+
+            await base.set_homework_feedback(project_id, homework_date, homework_id_user, text, id_user)
+
+            text, user_info, inline_kb, status = \
+                await admin_homework_process(project_id, id_user, 'feedback', homework_id_user, 0, homework_date)
+
+            text = user_info + shielding(text)
+            message_id = await base.get_menu_message_id(id_user)
+            if message_id > 0:
+                try:
+                    await bot.edit_message_text(
+                        chat_id=id_user,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=inline_kb,
+                        parse_mode='MarkdownV2')
+                except Exception as e:
+                    pass
+
+        elif answer_text == 'homework_response':
             await last_menu_message_delete(id_user)
-            await homework_response(homework_project_id, homework_date, id_user, text)
-            inline_kb = await homework_kb(homework_project_id, id_user, homework_date, 'response')
+
+            await homework_response(project_id, homework_date, id_user, text)
+
+            inline_kb = await homework_kb(project_id, id_user, homework_date, 'response')
             text = shielding(text)
             await message_answer(message, text, inline_kb)
 

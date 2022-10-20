@@ -396,7 +396,8 @@ async def homework_kb(project_id, id_user, homework_date=None, status='text'):
     return inline_kb
 
 
-async def homework_kb_admin(project_id, id_user, homework_date, status='text', response_is_filled=True):
+async def homework_kb_admin(id_user_admin, project_id, id_user, id_chat, homework_date, status='text',
+                            response_is_filled=True):
     text_text = 'Задание'
     text_response = 'Ответ студента'
     text_feedback = 'Ваш ответ'
@@ -412,14 +413,14 @@ async def homework_kb_admin(project_id, id_user, homework_date, status='text', r
 
     inline_kb = InlineKeyboardMarkup(row_width=1)
     inline_kb.row(
-        AddInlBtn(text=text_text, callback_data=f'admin_homework {project_id} text {id_user} {hd_text}'),
-        AddInlBtn(text=text_response, callback_data=f'admin_homework {project_id} response {id_user} {hd_text}'),
-        AddInlBtn(text=text_feedback, callback_data=f'admin_homework {project_id} feedback {id_user} {hd_text}')
+        AddInlBtn(text=text_text, callback_data=f'admin_homework {project_id} text {id_user} {id_chat} {hd_text}'),
+        AddInlBtn(text=text_response, callback_data=f'admin_homework {project_id} response {id_user} {id_chat} {hd_text}'),
+        AddInlBtn(text=text_feedback, callback_data=f'admin_homework {project_id} feedback {id_user} {id_chat} {hd_text}')
     )
     if response_is_filled:
         inline_kb.row(
-            AddInlBtn(text='✅ Принять', callback_data=f'admin_homework {project_id} accept {id_user} {hd_text}'),
-            AddInlBtn(text='❌ Вернуть', callback_data=f'admin_homework {project_id} return {id_user} {hd_text}')
+            AddInlBtn(text='✅ Принять', callback_data=f'admin_homework {project_id} accept {id_user} {id_chat} {hd_text}'),
+            AddInlBtn(text='❌ Вернуть', callback_data=f'admin_homework {project_id} return {id_user} {id_chat} {hd_text}')
         )
     else:
         inline_kb.row(
@@ -427,11 +428,7 @@ async def homework_kb_admin(project_id, id_user, homework_date, status='text', r
             AddInlBtn(text='-', callback_data='-')
         )
 
-    # cursor.execute('UPDATE homework_check SET selected = False WHERE project_id = %s AND id_user = %s',
-    #                (project_id, id_user))
-    # cursor.execute('UPDATE homework_check SET selected = True WHERE project_id = %s AND id_user = %s AND date = %s',
-    #                (project_id, id_user, homework_date))
-    # connect.commit()
+    await base.set_admin_homework(project_id, homework_date, id_user, id_user_admin)
 
     cursor.execute(
         """SELECT 
@@ -443,8 +440,7 @@ async def homework_kb_admin(project_id, id_user, homework_date, status='text', r
             project_id = %s 
                 AND id_user = %s
         ORDER BY
-            date""",
-                   (project_id, id_user))
+            date""", (project_id, id_user))
     result = cursor.fetchall()
     for i in result:
         date = i[0]
@@ -457,12 +453,12 @@ async def homework_kb_admin(project_id, id_user, homework_date, status='text', r
 
         inline_kb.add(AddInlBtn(
             text=icon + ' ' + date.strftime("%d.%m.%Y") + ' — ' + homework_status,
-            callback_data=f'admin_homework {project_id} {status} {id_user} {date}'))
+            callback_data=f'admin_homework {project_id} {status} {id_user} {id_chat} {date}'))
 
-    inline_kb.row(
-        AddInlBtn(text='Выбрать студента', callback_data=f'admin_homework {project_id}'),
-        AddInlBtn(text='Выбрать группу', callback_data=f'admin_homework {project_id} group'))
-    inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} back'))
+    # inline_kb.row(
+    #     AddInlBtn(text='Выбрать студента', callback_data=f'admin_homework {project_id} group 0 {id_chat}'),
+    #     AddInlBtn(text='Выбрать группу', callback_data=f'admin_homework {project_id} group'))
+    inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} back_user 0 {id_chat}'))
 
     return inline_kb
 
@@ -471,80 +467,78 @@ async def admin_homework_process(project_id, id_user_admin, status, id_user, id_
     if homework_date in ('', None):
         homework_date = await base.get_date_last_homework(project_id)
 
-    text, inline_kb = '', InlineKeyboardMarkup(row_width=1)
+    text, user_info, inline_kb = '', '', InlineKeyboardMarkup(row_width=1)
+
     if status == '':
-        chats = await base.get_chats_admin_user(project_id, id_user_admin)
+        chats = await base.get_chats_admin_user(project_id, id_user_admin, id_chat)
         number_of_chats = len(chats)
 
         if number_of_chats == 0:
             await send_error(
                 f"Пришло количество чатов 0 из base.get_chats_admin_user, "
                 f"где project_id {project_id}, id_user {id_user_admin}", "", str(traceback.format_exc()))
-
-            text = 'У вас нет чатов'
-
-            return text, inline_kb
+            text = 'У вас нет чатов.'
 
         elif number_of_chats > 1:
-            inline_kb.add(AddInlBtn(text='Выбрать группу', callback_data=f'admin_homework {project_id} group'))
+            text, user_info, inline_kb, status = \
+                await admin_homework_process(project_id, id_user_admin, 'group', id_user, id_chat, homework_date)
 
-        current_chat = chats[0]
-        id_chat = current_chat[0]
-        title = current_chat[1]
-        users = await base.get_users_in_chats(project_id, id_chat)
-        all_users = len(users)
-        # row_counter = 0
-        counter_users = 0
-        counter_homeworks = 0
-        text = title.replace('\\', '') + '\n'
+        else:
+            current_chat = chats[0]
+            id_chat = current_chat[0]
+            title = current_chat[1]
+            users = await base.get_users_in_chats(project_id, id_chat)
+            all_users = len(users)
+            # row_counter = 0
+            counter_users = 0
+            counter_homeworks = 0
+            text = title.replace('\\', '') + '\n'
 
-        for i in users:
-            i_id_user = i[0]
-            i_first_name = i[1]
-            i_last_name = i[2]
-            i_username = i[3]
-            i_fio = i[4]
-            i_count = i[5]
+            for i in users:
+                i_id_user = i[0]
+                i_first_name = i[1]
+                i_last_name = i[2]
+                i_username = i[3]
+                i_fio = i[4]
+                i_count = i[5]
 
-            if i_count > 0:
-                counter_users +=1
-                counter_homeworks += i_count
+                if i_count > 0:
+                    counter_users +=1
+                    counter_homeworks += i_count
 
-            if i_fio is None:
-                text_btn = i_first_name
-                if i_last_name is not None:
-                    text_btn += ' ' + i_last_name
-            else:
-                text_btn = i_fio
-            text_btn += ' ' + str(i_count)
+                if i_fio is None:
+                    text_btn = i_first_name
+                    if i_last_name is not None:
+                        text_btn += ' ' + i_last_name
+                else:
+                    text_btn = i_fio
+                text_btn += ' ' + str(i_count)
 
-            callback_data = f'admin_homework {project_id} text {i_id_user} {homework_date}'
-            inline_kb.add(AddInlBtn(text=text_btn, callback_data=callback_data))
+                callback_data = f'admin_homework {project_id} text {i_id_user} {id_chat} {homework_date}'
+                inline_kb.add(AddInlBtn(text=text_btn, callback_data=callback_data))
 
-            # row_counter += 1
-            # text += '\n' + str(row_counter) + '\. ' + text_btn
+            inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} back {id_user_admin}'))
 
-        inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} back'))
-
-        text += f'\nВсего домашних заданий к проверке: {counter_homeworks}'
-        text += f'\nСтудентов, сделавших домашние задания: {counter_users}'
-        text += f'\nСтудентов, не сделавших домашние задания: {all_users - counter_users}'
+            text += f'\nВсего домашних заданий к проверке: {counter_homeworks}'
+            text += f'\nСтудентов, сделавших домашние задания: {counter_users}'
+            text += f'\nСтудентов, не сделавших домашние задания: {all_users - counter_users}'
 
     elif status in ('text', 'response', 'feedback'):
-        # homework_date = await base.get_date_last_homework(project_id)
-        # if homework_date is not None:
-        status_meaning, accepted, response_is_filled = \
+        status_meaning, accepted, response_is_filled, user_info = \
             await base.get_date_status_meaning_homework(status, project_id, homework_date, id_user)
-        inline_kb = await homework_kb_admin(project_id, id_user, homework_date, status, response_is_filled)
+
+        inline_kb = await homework_kb_admin(id_user_admin, project_id, id_user, id_chat, homework_date, status,
+                                            response_is_filled)
+
         if status_meaning in ('', None):
             text = 'Нет данных'
             if status == 'response':
                 text = 'Студент еще не выполнил домашнее задание.'
-            if status == 'feedback':
+            elif status == 'feedback':
                 if accepted:
                     text = 'Вы уже приняли это домашнее задание.'
                 elif response_is_filled:
-                    text = 'Вы еще не проверили это домашнее задание. Для того, чтобы оставить отклик на домашнее задание — пришлите сообщение в ответ.'
+                    text = 'Для того, чтобы оставить отклик на домашнее задание — пришлите сообщение в ответ.'
                     text += message_requirements()
                 else:
                     text = 'Пока рано откликаться, студент еще не выполнил домашнее задание.'
@@ -553,25 +547,67 @@ async def admin_homework_process(project_id, id_user_admin, status, id_user, id_
 
     elif status == 'accept':
         await base.set_status_homework(project_id, homework_date, id_user, "Принято", True)
-        status_meaning, accepted, response_is_filled = \
+
+        status_meaning, accepted, response_is_filled, user_info = \
             await base.get_date_status_meaning_homework("feedback", project_id, homework_date, id_user)
-        inline_kb = await homework_kb_admin(project_id, id_user, homework_date, "feedback", response_is_filled)
+
+        inline_kb = await homework_kb_admin(id_user_admin, project_id, id_user, id_chat, homework_date, "feedback",
+                                            response_is_filled)
+
         text = 'Вы приняли домашнее задание.'
 
     elif status == 'return':
         await base.set_status_homework(project_id, homework_date, id_user, "Возвращено", True)
-        status_meaning, accepted, response_is_filled = \
+
+        status_meaning, accepted, response_is_filled, user_info = \
             await base.get_date_status_meaning_homework("feedback", project_id, homework_date, id_user)
-        inline_kb = await homework_kb_admin(project_id, id_user, homework_date, "feedback", response_is_filled)
-        text = 'Вы вернули домашнее задание на доработку. Оставите отклик?'
+
+        inline_kb = await homework_kb_admin(id_user_admin, project_id, id_user, id_chat, homework_date, "feedback",
+                                            response_is_filled)
+
+        if status_meaning is None:
+            text = 'Вы вернули домашнее задание на доработку. Оставите отклик?'
+            text += message_requirements()
+        else:
+            text = status_meaning
 
     elif status == 'group':
-        chats = await base.get_chats_admin_user(project_id, id_user_admin)
-        # TODO
+        if id_chat == 0:
+            chats = await base.get_chats_admin_user(project_id, id_user_admin, id_chat)
+            for i in chats:
+                i_id_chat = i[0]
+                i_title = i[1].replace('\\', '')
+                inline_kb.add(AddInlBtn(text=i_title, callback_data=f'admin_homework {project_id} group 0 {i_id_chat}'))
+            inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} back_menu_back'))
 
-    text = shielding(text)
+            text = 'Выберете группу.'
 
-    return text, inline_kb, status
+        else:
+            text, user_info, inline_kb, status = \
+                await admin_homework_process(project_id, id_user_admin, '', id_user, id_chat, homework_date)
+
+    elif status == 'back_menu_back':
+        pass
+
+    elif status == 'back_user':
+        text, user_info, inline_kb, status = \
+            await admin_homework_process(project_id, id_user_admin, '', 0, id_chat, homework_date)
+
+    elif status == 'back':
+        chats = await base.get_chats_admin_user(project_id, id_user_admin, 0)
+        number_of_chats = len(chats)
+
+        if number_of_chats == 1:
+            status = 'back_menu_back'
+
+        elif number_of_chats > 1:
+            id_chat = 0
+            status = 'group'
+
+            text, user_info, inline_kb, status = \
+                await admin_homework_process(project_id, id_user_admin, status, 0, id_chat, homework_date)
+
+    return text, user_info, inline_kb, status
 
 
 async def homework_process(project_id, id_user, status, homework_date, message_text=''):
@@ -662,6 +698,18 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
         for i in meaning:
             i_id_user = i[0]
             # TODO
+            cursor.execute("SELECT id_user FROM public.project_administrators")
+            test_result = cursor.fetchall()
+            not_go = True
+            for qi in test_result:
+                qi_id_user = qi[0]
+                if qi_id_user == i_id_user:
+                    not_go = False
+                    break
+
+            if not_go:
+                continue
+
             if not i_id_user == SUPER_ADMIN_ID:
                 continue
 
@@ -681,10 +729,9 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
                 # if not its_admin(i_id_user, chat_admins):
                 if True:
                     cursor.execute(
-                        "INSERT INTO homework_check (project_id, date, id_chat, id_user, date_actual, "
-                        "status, selected, message_id) "
-                        "VALUES (%s, %s, %s, %s, NULL, 'Получено', False, 0)",
-                        (project_id, date, i_id_chat, i_id_user))
+                        "INSERT INTO homework_check (project_id, date, id_user, status, selected) "
+                        "VALUES (%s, %s, %s, 'Получено', False)",
+                        (project_id, date, i_id_user))
                     connect.commit()
 
                     inline_kb = await homework_kb(project_id, i_id_user, date)
@@ -706,23 +753,13 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
         connect.commit()
 
     elif status == 'text':
-        # cursor.execute('SELECT text FROM homework_text WHERE project_id = %s AND date = %s',
-        #                (project_id, homework_date))
-        # text = shielding(cursor.fetchone()[0])
-        status_meaning, accepted, response_is_filled = \
+        status_meaning, accepted, response_is_filled, user_info = \
             await base.get_date_status_meaning_homework(status, project_id, homework_date, id_user)
         text = shielding(status_meaning)
         inline_kb = await homework_kb(project_id, id_user, homework_date, status)
 
     elif status in ('response', 'feedback'):
-        # cursor.execute(
-        #     f"SELECT {status}, status = 'Принято', NOT response = NULL FROM homework_check "
-        #     "WHERE project_id = %s AND date = %s AND id_user = %s", (project_id, homework_date, id_user))
-        # result = cursor.fetchone()
-        # status_meaning = result[0]
-        # accepted = bool(result[1])
-        # response_is_filled = bool(result[2])
-        status_meaning, accepted, response_is_filled = \
+        status_meaning, accepted, response_is_filled, user_info = \
             await base.get_date_status_meaning_homework(status, project_id, homework_date, id_user)
         if status_meaning in ('', None):
             if status == 'response':
@@ -737,6 +774,7 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
                     text = 'Для начала выполните домашнее задание.'
         else:
             text = status_meaning
+
         text = shielding(text)
         inline_kb = await homework_kb(project_id, id_user, homework_date, status)
 
