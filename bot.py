@@ -522,7 +522,7 @@ class Database:
                     users.first_name, 
                     coalesce(users.last_name, ''), 
                     coalesce(users.username, ''), 
-                    users.fio, 
+                    coalesce(users.fio, ''), 
                     settings.title 
                 FROM users 
                 INNER JOIN chats 

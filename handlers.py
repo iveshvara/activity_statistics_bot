@@ -40,24 +40,30 @@ async def command_start(message: Message):
     #         (i[0], i[1], i[2], i[3]))
     #     connect.commit()
 
-    cursor.execute(
-        '''SELECT DISTINCT chats.id_chat, settings.title, settings.project_id FROM chats 
-        INNER JOIN settings ON settings.id_chat =  chats.id_chat
-        WHERE NOT chats.deleted AND NOT settings.curators_group AND settings.enable_group ''')
-    meaning = cursor.fetchall()
-    for i in meaning:
-        try:
-            chat_admins = await bot.get_chat_administrators(i[0])
-            qwe = 1
-        except Exception as e:
-            chat_admins = ()
+    # cursor.execute(
+    #     '''SELECT DISTINCT chats.id_chat, settings.title, settings.project_id FROM chats
+    #     INNER JOIN settings ON settings.id_chat =  chats.id_chat
+    #     WHERE NOT chats.deleted AND NOT settings.curators_group AND settings.enable_group ''')
+    # meaning = cursor.fetchall()
+    # for i in meaning:
+    #     try:
+    #         chat_admins = await bot.get_chat_administrators(i[0])
+    #         qwe = 1
+    #     except Exception as e:
+    #         chat_admins = ()
+    #
+    #     for ii in chat_admins:
+    #         id_user = ii.user.id
+    #         cursor.execute("UPDATE users SET role = 'admin' WHERE id_user = %s", (id_user,))
+    #         connect.commit()
 
-        for ii in chat_admins:
-            id_user = ii.user.id
-            cursor.execute("UPDATE users SET role = 'admin' WHERE id_user = %s", (id_user,))
-            connect.commit()
+    # cursor.execute('''UPDATE homework_check SET id_user = 988411529 WHERE id_user = 385910607;''')
+    # connect.commit()
 
-    print('Ok')
+    cursor.execute('''DELETE FROM homework_check; DELETE FROM homework_text;''')
+    connect.commit()
+
+    await bot.send_message(text='Done', chat_id=message.from_user.id)
 
 
 @dp.message_handler(commands=['get_stat'])

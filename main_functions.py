@@ -167,8 +167,8 @@ async def get_stat(id_chat, id_user=None):
             LEFT JOIN users 
                 ON chats.id_user = users.id_user  
             WHERE chats.id_chat = {id_chat} 
-            GROUP BY chats.id_chat, chats.id_user, users.first_name, users.last_name, users.username, users.fio, 
-                chats.date_of_the_last_message, chats.deleted 
+            GROUP BY chats.id_chat, chats.id_user, users.first_name, coalesce(users.last_name, ''), 
+                coalesce(users.username, ''), coalesce(users.fio, ''), chats.date_of_the_last_message, chats.deleted 
             ORDER BY deleted ASC, inactive_days ASC, {sort} DESC '''
         )
         meaning = cursor.fetchall()
@@ -646,7 +646,11 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
             'WHERE projects.project_id = %s', (id_user, project_id))
         meaning = cursor.fetchone()
         if meaning is not None:
-            await bot.delete_message(id_user, meaning[0])
+            try:
+                await bot.delete_message(id_user, meaning[0])
+            except Exception as e:
+                pass
+
             text = shielding(message_text)
             inline_kb.add(AddInlBtn(text='Отправить как домашнее задание', callback_data=f'homework {project_id} homework'))
             inline_kb.add(AddInlBtn(text='Отправить как рассылку', callback_data=f'homework {project_id} sending'))
@@ -656,13 +660,12 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
         date = None
         if status == 'homework':
             date = get_today(True)
-            # TODO
-            # cursor.execute('SELECT project_id FROM homework_text WHERE project_id = %s AND date = %s', (project_id, date))
-            # meaning = cursor.fetchone()
-            # if meaning is not None:
-            #     text = 'Можно отправить только одно домашнее задание в день\.'
-            #     inline_kb.add(AddInlBtn(text='Ok', callback_data=f'homework {project_id} back'))
-            #     return text, inline_kb, ''
+            cursor.execute('SELECT project_id FROM homework_text WHERE project_id = %s AND date = %s', (project_id, date))
+            meaning = cursor.fetchone()
+            if meaning is not None:
+                text = 'Можно отправить только одно домашнее задание в день\.'
+                inline_kb.add(AddInlBtn(text='Ok', callback_data=f'homework {project_id} back'))
+                return text, inline_kb, ''
 
         cursor.execute('SELECT text FROM project_administrators WHERE id_user = %s AND project_id = %s',
                        (id_user, project_id))
@@ -677,18 +680,18 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
 
         cursor.execute(
             '''SELECT DISTINCT 
-                chats.id_user, 
-                chats.id_chat, 
+                users.id_user,  
                 coalesce(users.menu_message_id, 0)
             FROM settings 
             INNER JOIN chats 
                 ON settings.id_chat = chats.id_chat 
                     AND NOT chats.deleted AND settings.enable_group 
-                    AND NOT settings.curators_group
-            LEFT JOIN users 
-                ON chats.id_user = users.id_user 		
-            WHERE 
-                settings.project_id = %s''',
+                    AND settings.project_id = %s
+            INNER JOIN users 
+                ON chats.id_user = users.id_user 
+                AND NOT users.role = 'admin'
+            --INNER JOIN project_administrators 
+            --    ON users.id_user = project_administrators.id_user''',
             (project_id,)
         )
         meaning = cursor.fetchall()
@@ -697,36 +700,10 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
         chat_admins = None
         for i in meaning:
             i_id_user = i[0]
-            # TODO
-            cursor.execute("SELECT id_user FROM public.project_administrators")
-            test_result = cursor.fetchall()
-            not_go = True
-            for qi in test_result:
-                qi_id_user = qi[0]
-                if qi_id_user == i_id_user:
-                    not_go = False
-                    break
-
-            if not_go:
-                continue
-
-            if not i_id_user == SUPER_ADMIN_ID:
-                continue
-
-            i_id_chat = i[1]
-            i_message_id = i[2]
+            i_message_id = i[1]
             inline_kb = InlineKeyboardMarkup(row_width=1)
 
             if status == 'homework':
-                if not last_i_id_chat == i_id_chat:
-                    last_i_id_chat = i_id_chat
-                    try:
-                        chat_admins = await bot.get_chat_administrators(i_id_chat)
-                    except Exception as e:
-                        chat_admins = ()
-
-                # TODO
-                # if not its_admin(i_id_user, chat_admins):
                 if True:
                     cursor.execute(
                         "INSERT INTO homework_check (project_id, date, id_user, status, selected) "
@@ -737,15 +714,20 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
                     inline_kb = await homework_kb(project_id, i_id_user, date)
 
             if i_message_id > 0:
-                await bot.delete_message(chat_id=i_id_user, message_id=i_message_id)
+                try:
+                    await bot.delete_message(chat_id=i_id_user, message_id=i_message_id)
+                except Exception as e:
+                    pass
 
-            message = await bot.send_message(text=sending_text, chat_id=i_id_user, reply_markup=inline_kb)
-
-            if status == 'homework':
-                homework_message_id_text = message.message_id
-                cursor.execute('UPDATE users SET menu_message_id = %s WHERE id_user = %s',
-                               (homework_message_id_text, id_user))
-                connect.commit()
+            try:
+                message = await bot.send_message(text=sending_text, chat_id=i_id_user, reply_markup=inline_kb)
+                if status == 'homework':
+                    homework_message_id_text = message.message_id
+                    cursor.execute('UPDATE users SET menu_message_id = %s WHERE id_user = %s',
+                                   (homework_message_id_text, id_user))
+                    connect.commit()
+            except Exception as e:
+                await send_error('', str(e), traceback.format_exc())
 
         cursor.execute(
             'UPDATE project_administrators SET status = NULL, text = NULL, message_id = 0 '
@@ -984,7 +966,10 @@ async def registration_process(message: Message, meaning='', its_callback=False)
             pass
 
         if not text == '':
-            message = await bot.send_message(text=text, chat_id=id_user, reply_markup=inline_kb, parse_mode='MarkdownV2')
+            try:
+                message = await bot.send_message(text=text, chat_id=id_user, reply_markup=inline_kb, parse_mode='MarkdownV2')
+            except Exception as e:
+                pass
 
     if registration_field == 'done':
         return
@@ -1009,5 +994,4 @@ async def registration_process(message: Message, meaning='', its_callback=False)
         cursor.execute(query_text)
         connect.commit()
     except Exception as e:
-        await bot.send_message(text=f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{query_text}\n\nError text:\n{str(e)}',
-                               chat_id=LOGS_CHANNEL_ID)
+        await send_error('', str(e), traceback.format_exc())
