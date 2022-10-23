@@ -109,6 +109,9 @@ async def get_projects_cb(projects):
 
 
 async def get_name_tg(id_user, first_name, last_name, username, fio=None):
+    if last_name is None:
+        last_name = ''
+
     if fio is None or fio.split() == '' or len(fio) < 5:
         name_user = shielding(first_name + ' ' + last_name).strip()
     else:
@@ -151,8 +154,9 @@ def align_by_number_of_characters(number, number_of_characters):
 
 
 def message_requirements():
-    return \
-        '\nТребования к сообщению:\n' \
-        '— Можно использовать эмодзи и ссылки в открытом виде.\n' \
-        '— Нельзя использовать форматирование. Введенное форматирование будет утеряно.\n' \
-        '— Текст должен помещаться в одно сообщение Telegram (не больше 4096 символов).'
+    # return \
+    #     '\nТребования к сообщению:\n' \
+    #     '— Можно использовать эмодзи и ссылки в открытом виде.\n' \
+    #     '— Нельзя использовать форматирование. Введенное форматирование будет утеряно.\n' \
+    #     '— Текст должен помещаться в одно сообщение Telegram (не больше 4096 символов).'
+    return ""

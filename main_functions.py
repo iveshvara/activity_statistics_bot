@@ -681,7 +681,8 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
         cursor.execute(
             '''SELECT DISTINCT 
                 users.id_user,  
-                coalesce(users.menu_message_id, 0)
+                coalesce(users.menu_message_id, 0),
+                users.role = 'user'
             FROM settings 
             INNER JOIN chats 
                 ON settings.id_chat = chats.id_chat 
@@ -689,7 +690,6 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
                     AND settings.project_id = %s
             INNER JOIN users 
                 ON chats.id_user = users.id_user 
-                AND NOT users.role = 'admin'
             --INNER JOIN project_administrators 
             --    ON users.id_user = project_administrators.id_user''',
             (project_id,)
@@ -701,17 +701,15 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
         for i in meaning:
             i_id_user = i[0]
             i_message_id = i[1]
-            inline_kb = InlineKeyboardMarkup(row_width=1)
+            its_homework = i[2] and status == 'homework'
 
-            if status == 'homework':
-                if True:
-                    cursor.execute(
-                        "INSERT INTO homework_check (project_id, date, id_user, status, selected) "
-                        "VALUES (%s, %s, %s, 'Получено', False)",
-                        (project_id, date, i_id_user))
-                    connect.commit()
+            if its_homework:
+                cursor.execute(
+                    "INSERT INTO homework_check (project_id, date, id_user, status, selected) "
+                    "VALUES (%s, %s, %s, 'Получено', False)", (project_id, date, i_id_user))
+                connect.commit()
 
-                    inline_kb = await homework_kb(project_id, i_id_user, date)
+                inline_kb = await homework_kb(project_id, i_id_user, date)
 
             if i_message_id > 0:
                 try:
@@ -721,7 +719,7 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
 
             try:
                 message = await bot.send_message(text=sending_text, chat_id=i_id_user, reply_markup=inline_kb)
-                if status == 'homework':
+                if its_homework:
                     homework_message_id_text = message.message_id
                     cursor.execute('UPDATE users SET menu_message_id = %s WHERE id_user = %s',
                                    (homework_message_id_text, id_user))

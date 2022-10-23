@@ -7,7 +7,6 @@ from aiogram.types import Message, User
 # from aiogram.contrib.middlewares.logging import LoggingMiddleware
 import traceback
 import psycopg2
-import datetime
 
 bot = Bot(TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())

@@ -60,8 +60,8 @@ async def command_start(message: Message):
     # cursor.execute('''UPDATE homework_check SET id_user = 988411529 WHERE id_user = 385910607;''')
     # connect.commit()
 
-    cursor.execute('''DELETE FROM homework_check; DELETE FROM homework_text;''')
-    connect.commit()
+    # cursor.execute('''DELETE FROM homework_check; DELETE FROM homework_text;''')
+    # connect.commit()
 
     await bot.send_message(text='Done', chat_id=message.from_user.id)
 
