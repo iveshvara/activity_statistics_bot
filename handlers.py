@@ -82,6 +82,10 @@ async def command_start(message: Message):
     #         cursor.execute("UPDATE chats SET deleted = True WHERE id_chat = %s AND id_user = %s", (id_chat, id_user))
     #         connect.commit()
 
+    # Очистить 777000
+    cursor.execute('''DELETE FROM chats WHERE id_user = 777000''')
+    connect.commit()
+
     await bot.send_message(text='Done', chat_id=message.from_user.id)
 
 

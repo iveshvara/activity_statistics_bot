@@ -142,7 +142,7 @@ async def get_stat(id_chat, id_user=None):
         count_messages = 0
         cursor.execute(
             f'''SELECT 
-                chats.id_user, 
+                users.id_user, 
                 users.first_name, 
                 coalesce(users.last_name, ''), 
                 coalesce(users.username, ''), 
@@ -152,7 +152,8 @@ async def get_stat(id_chat, id_user=None):
                 chats.deleted, 
                 chats.date_of_the_last_message, 
                 CASE 
-                    WHEN NOT chats.deleted AND {period_of_activity} > DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
+                    WHEN NOT chats.deleted 
+                        AND {period_of_activity} > DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
                         THEN 0 
                     ELSE DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
                 END AS inactive_days
@@ -161,11 +162,20 @@ async def get_stat(id_chat, id_user=None):
                 ON chats.id_chat = messages.id_chat 
                     AND chats.id_user = messages.id_user 
                     AND {period_of_activity} > DATE_PART('day', '{today}' - messages.date)
-            LEFT JOIN users 
+            INNER JOIN users 
                 ON chats.id_user = users.id_user  
-            WHERE chats.id_chat = {id_chat} 
-            GROUP BY chats.id_chat, chats.id_user, users.first_name, coalesce(users.last_name, ''), 
-                coalesce(users.username, ''), coalesce(users.fio, ''), chats.date_of_the_last_message, chats.deleted 
+            WHERE 
+                chats.id_chat = {id_chat} 
+                AND users.id_user IS NOT NULL
+            GROUP BY 
+                users.id_user, 
+                users.first_name, 
+                coalesce(users.last_name, ''), 
+                coalesce(users.username, ''), 
+                coalesce(users.fio, ''),
+                chats.deleted, 
+                chats.date_of_the_last_message, 
+                inactive_days
             ORDER BY deleted ASC, inactive_days ASC, {sort} DESC '''
         )
         meaning = cursor.fetchall()

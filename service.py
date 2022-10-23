@@ -109,6 +109,9 @@ async def get_projects_cb(projects):
 
 
 async def get_name_tg(id_user, first_name, last_name, username, fio=None):
+    if first_name is None:
+        first_name = ''
+
     if last_name is None:
         last_name = ''
 
