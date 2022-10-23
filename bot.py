@@ -68,7 +68,7 @@ class Database:
             with self.connect:
                 self.cursor.execute("UPDATE settings SET project_id = %s WHERE id_chat = %s", (project_id, id_chat))
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def save_new_chat(self, id_chat, title):
         try:
@@ -82,14 +82,14 @@ class Database:
                     VALUES (%s, %s, False, False, False, False, False, 7, False, 0, False, True, 
                     %s, %s, False, False)""", (id_chat, title, today, today))
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def save_new_title(self, id_chat, title):
         try:
             with self.connect:
                 self.cursor.execute("UPDATE settings SET title = %s WHERE id_chat = %s", (title, id_chat))
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def migrate_to_chat_id(self, new_id_chat, id_chat):
         try:
@@ -99,7 +99,7 @@ class Database:
                 self.cursor.execute("UPDATE messages SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
                 self.cursor.execute("UPDATE settings SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def save_or_update_new_title(self, id_chat, title):
         try:
@@ -112,14 +112,14 @@ class Database:
                     self.cursor.execute("UPDATE settings SET enable_group = True, title = %s WHERE id_chat = %s",
                                         (title, id_chat))
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def save_chat_disable(self, id_chat):
         try:
             with self.connect:
                 self.cursor.execute("UPDATE settings SET enable_group = False WHERE id_chat = %s", (id_chat,))
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def save_user_disable_in_chat(self, id_chat, id_user, date_of_the_last_message):
         try:
@@ -143,7 +143,7 @@ class Database:
                             AND settings.id_chat = %s""", (id_chat,))
                 return self.cursor.fetchone()
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def save_message_count(self, id_chat, id_user, date_of_the_last_message, characters, message_id):
         try:
@@ -152,7 +152,7 @@ class Database:
                                     VALUES (%s, %s, %s, %s, %s)""",
                                     (id_chat, id_user, date_of_the_last_message, characters, message_id))
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def insert_or_update_chats_and_users(self, id_chat, user: User, characters, date_of_the_last_message):
         try:
@@ -211,7 +211,7 @@ class Database:
             self.cursor.execute(text, values)
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def save_menu_message_id(self, message: Message):
         try:
@@ -222,7 +222,7 @@ class Database:
                 self.cursor.execute("UPDATE users SET menu_message_id = %s WHERE id_user = %s", (message_id, id_user))
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def get_menu_message_id(self, id_user):
         try:
@@ -234,7 +234,7 @@ class Database:
                 return result[0]
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def its_admin(self, id_user):
         try:
@@ -244,7 +244,7 @@ class Database:
             return result[0]
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def get_chats_admin_user(self, project_id, id_user, id_chat):
         try:
@@ -269,7 +269,7 @@ class Database:
             return result
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def get_users_in_chats(self, project_id, id_chat):
         try:
@@ -305,7 +305,7 @@ class Database:
             return result
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def get_date_last_homework(self, project_id):
         try:
@@ -319,7 +319,7 @@ class Database:
             return homework_date
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def get_date_status_meaning_homework(self, status, project_id, homework_date, id_user=None):
         try:
@@ -379,7 +379,7 @@ class Database:
             return status_meaning, accepted, status_is_filled, user_info
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def get_all_projects(self):
         try:
@@ -389,7 +389,7 @@ class Database:
             return result
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def get_chats_in_project(self, project_id):
         try:
@@ -408,7 +408,7 @@ class Database:
             return result
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def application_for_membership(self, id_user):
         try:
@@ -432,7 +432,7 @@ class Database:
             return result
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def which_menu_to_show(self, id_user):
         try:
@@ -474,7 +474,7 @@ class Database:
             return answer_text, project_id, homework_date, homework_id_user
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def set_status_homework(self, project_id, date, id_user, status, set_date=False):
         try:
@@ -490,7 +490,7 @@ class Database:
                     (status, date_actual, project_id, date, id_user))
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def set_admin_homework(self, project_id, date, id_user, id_user_admin):
         try:
@@ -503,7 +503,7 @@ class Database:
                     (id_user_admin, project_id, date, id_user))
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def set_homework_feedback(self, project_id, homework_date, id_user, feedback, feedback_author_id):
         try:
@@ -514,7 +514,7 @@ class Database:
                     (feedback, feedback_author_id, project_id, homework_date, id_user))
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def get_user_info(self, id_user):
         try:
@@ -544,7 +544,7 @@ class Database:
             return first_name, last_name, username, fio, title
 
         except Exception as e:
-            await send_error('', str(e), traceback.format_exc())
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
 
 base = Database()
