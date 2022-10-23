@@ -29,6 +29,7 @@ async def command_start(message: Message):
 
 @dp.message_handler(commands=['test'])
 async def command_start(message: Message):
+    # Перенести пользователей из chats в users
     # cursor.execute('''SELECT DISTINCT chats.id_user, chats.first_name, chats.last_name, chats.username FROM chats
     #                 LEFT JOIN users ON chats.id_user = users.id_user
     #                 WHERE users.id_user IS NULL''')
@@ -40,6 +41,7 @@ async def command_start(message: Message):
     #         (i[0], i[1], i[2], i[3]))
     #     connect.commit()
 
+    # Заполнить админов групп
     # cursor.execute(
     #     '''SELECT DISTINCT chats.id_chat, settings.title, settings.project_id FROM chats
     #     INNER JOIN settings ON settings.id_chat =  chats.id_chat
@@ -57,11 +59,28 @@ async def command_start(message: Message):
     #         cursor.execute("UPDATE users SET role = 'admin' WHERE id_user = %s", (id_user,))
     #         connect.commit()
 
-    # cursor.execute('''UPDATE homework_check SET id_user = 988411529 WHERE id_user = 385910607;''')
-    # connect.commit()
-
+    # Очистить домашки
     # cursor.execute('''DELETE FROM homework_check; DELETE FROM homework_text;''')
     # connect.commit()
+
+    # Актуализация удаленных
+    # # chat_member = await bot.get_chat_member(-1001531919077, 5751545336)
+    # # member = chat_member.status == 'member'
+    # cursor.execute('''SELECT * FROM chats WHERE NOT deleted''')
+    # result = cursor.fetchall()
+    # for i in result:
+    #     id_chat = i[0]
+    #     id_user = i[1]
+    #     member = False
+    #     try:
+    #         chat_member = await bot.get_chat_member(id_chat, id_user)
+    #         member = not chat_member.status == 'left'
+    #     except Exception as e:
+    #         pass
+    #
+    #     if not member:
+    #         cursor.execute("UPDATE chats SET deleted = True WHERE id_chat = %s AND id_user = %s", (id_chat, id_user))
+    #         connect.commit()
 
     await bot.send_message(text='Done', chat_id=message.from_user.id)
 

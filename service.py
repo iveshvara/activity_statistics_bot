@@ -112,6 +112,9 @@ async def get_name_tg(id_user, first_name, last_name, username, fio=None):
     if last_name is None:
         last_name = ''
 
+    if username is None:
+        username = ''
+
     if fio is None or fio.split() == '' or len(fio) < 5:
         name_user = shielding(first_name + ' ' + last_name).strip()
     else:

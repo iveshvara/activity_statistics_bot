@@ -546,5 +546,25 @@ class Database:
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
+    async def get_chats_for_reminder(self):
+        try:
+            today = get_today()
+            self.cursor.execute(
+                "SELECT id_chat FROM settings WHERE report_enabled AND enable_group AND %s > last_notify_date",
+                (today,))
+            return self.cursor.fetchall()
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
+
+    async def save_last_notify_date_reminder(self, id_chat):
+        try:
+            today = get_today()
+            with self.connect:
+                self.cursor.execute('UPDATE settings SET last_notify_date = %s WHERE id_chat = %s', (today, id_chat))
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
+
 
 base = Database()

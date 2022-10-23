@@ -1,6 +1,6 @@
 
 from bot import bot, cursor, connect, base, send_error
-from _settings import LOGS_CHANNEL_ID, THIS_IS_BOT_NAME, SUPER_ADMIN_ID
+from _settings import SUPER_ADMIN_ID
 from service import its_admin, shielding, get_name_tg, reduce_large_numbers, get_today, message_requirements
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton as AddInlBtn
 # from aiogram.contrib.middlewares.logging import LoggingMiddleware
@@ -9,21 +9,18 @@ import traceback
 
 
 async def run_reminder():
-    pass
-    # today = get_today()
-    # weekday = today.weekday()
-    # if weekday == 1:
-    #     cursor.execute('SELECT * FROM settings WHERE report_enabled AND enable_group AND %s > last_notify_date',
-    #                    (today,))
-    #     result_tuple = cursor.fetchall()
-    #     for i in result_tuple:
-    #         id_chat = i[0]
-    #         text = await get_stat(id_chat)
-    #         # if not text == '' and not text == 'Нет статистики для отображения\.':
-    #         if not text == '':
-    #             await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
-    #             cursor.execute('UPDATE settings SET last_notify_date = %s WHERE id_chat = %s', (today, id_chat))
-    #             connect.commit()
+    result = await base.get_chats_for_reminder()
+    for i in result:
+        id_chat = i[0]
+        text = await get_stat(id_chat)
+
+        if not text == '':
+            try:
+                await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
+            except Exception as e:
+                await send_error(text, str(e), traceback.format_exc())
+
+            await base.save_last_notify_date_reminder(id_chat)
 
     # text = ''
     #
@@ -163,7 +160,7 @@ async def get_stat(id_chat, id_user=None):
             LEFT JOIN messages 
                 ON chats.id_chat = messages.id_chat 
                     AND chats.id_user = messages.id_user 
-                    AND {period_of_activity} > DATE_PART('day', '{today}' - chats.date_of_the_last_message)
+                    AND {period_of_activity} > DATE_PART('day', '{today}' - messages.date)
             LEFT JOIN users 
                 ON chats.id_user = users.id_user  
             WHERE chats.id_chat = {id_chat} 
