@@ -228,8 +228,10 @@ class Database:
         try:
             self.cursor.execute("SELECT coalesce(menu_message_id, 0) FROM users WHERE id_user = %s", (id_user,))
             result = self.cursor.fetchone()
-
-            return result[0]
+            if result is None:
+                return 0
+            else:
+                return result[0]
 
         except Exception as e:
             await send_error('', str(e), traceback.format_exc())
