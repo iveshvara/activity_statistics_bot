@@ -16,8 +16,7 @@ async def on_startup(_):
 
 
 async def scheduler():
-    # aioschedule.every().monday.at("00:00").do(run_reminder)
-    aioschedule.every().monday.do(run_reminder)
+    aioschedule.every().monday.at("00:00").do(run_reminder)
     while True:
         await aioschedule.run_pending()
         await asyncio.sleep(1)

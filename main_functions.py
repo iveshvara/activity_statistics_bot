@@ -378,7 +378,9 @@ async def homework_kb(project_id, id_user, homework_date=None, status='text'):
                    (project_id, id_user, homework_date))
     connect.commit()
 
-    cursor.execute("SELECT date, status, status = 'Принято' FROM homework_check WHERE project_id = %s AND id_user = %s",
+    cursor.execute(
+        "SELECT date, status, status = 'Принято' FROM homework_check WHERE project_id = %s AND id_user = %s"
+        "ORDER BY date",
                    (project_id, id_user))
     result = cursor.fetchall()
     for i in result:
