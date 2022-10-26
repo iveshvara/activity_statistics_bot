@@ -1,5 +1,5 @@
 
-from bot import bot, cursor, connect, base, send_error
+from bot_base import bot, cursor, connect, base, send_error
 from _settings import SUPER_ADMIN_ID
 from service import its_admin, shielding, get_name_tg, reduce_large_numbers, get_today, message_requirements
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton as AddInlBtn

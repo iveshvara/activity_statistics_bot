@@ -1,6 +1,6 @@
 
 from _settings import THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
-from bot import bot, dp, base, cursor, connect, send_error
+from bot_base import bot, dp, base, cursor, connect, send_error
 from main_functions import get_stat, get_start_menu, registration_process, registration_command, \
     admin_homework_process, homework_process, homework_response, homework_kb
 from utility_functions import process_parameter_continuation, callback_edit_text, \
@@ -102,6 +102,15 @@ async def command_start(message: Message):
     #         cursor.execute('''UPDATE users SET registration_field = 'done' WHERE id_user = %s''', (id_user,))
     #         connect.commit()
     #         print(id_user, q, result.index(i))
+
+    cursor.execute('''SELECT id_chat, title FROM settings''')
+    result = cursor.fetchall()
+    for i in result:
+        id_chat = i[0]
+        title = i[1]
+        title = title.replace('\\', '')
+        cursor.execute('''UPDATE settings SET title = %s WHERE id_chat = %s''', (title, id_chat))
+        connect.commit()
 
     await bot.send_message(text='Done', chat_id=message.from_user.id)
 
@@ -422,12 +431,10 @@ async def message_handler(message):
             await send_error(message.content_type, 'id_user = 777000', traceback.format_exc())
 
         elif message.content_type in created_title_content_type:
-            title = shielding(message.chat.title)
-            await base.save_new_chat(id_chat, title)
+            await base.save_new_chat(id_chat, message.chat.title)
 
         elif message.content_type == 'new_chat_title':
-            title = shielding(message.chat.title)
-            await base.save_new_title(id_chat, title)
+            await base.save_new_title(id_chat, message.chat.title)
 
         elif message.content_type == 'migrate_to_chat_id':
             new_id_chat = message.migrate_to_chat_id
@@ -437,8 +444,7 @@ async def message_handler(message):
             for i in message.new_chat_members:
                 if i.is_bot:
                     if i.username == THIS_IS_BOT_NAME:
-                        title = shielding(message.chat.title)
-                        await base.save_or_update_new_title(id_chat, title)
+                        await base.save_or_update_new_title(id_chat, message.chat.title)
 
                         text = f'Добавлена новая группа "{message.chat.title}"'
                         await bot.send_message(text=text, chat_id=SUPER_ADMIN_ID)
@@ -639,7 +645,7 @@ async def handle_location(message: Message):
         uts_text = '\- ' + uts_text
     uts_text += ' UTC'
 
-    text = 'Теперь неодходимо отправить номер телефона.'
+    text = 'Теперь необходимо отправить номер телефона.'
     text = shielding(text)
     keyboard = ReplyKeyboardMarkup()
     keyboard.add(KeyboardButton('Отправьте ваш номер телефона.', request_contact=True))

@@ -1,5 +1,5 @@
 
-from bot import dp
+from bot_base import dp
 from aiogram.utils import executor
 import logging
 import asyncio

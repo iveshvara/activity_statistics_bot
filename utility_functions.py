@@ -1,6 +1,6 @@
 
-from bot import bot, cursor, connect, base, send_error
-from service import convert_bool, convert_bool_binary
+from bot_base import bot, cursor, connect, base, send_error
+from service import convert_bool, convert_bool_binary, shielding
 from main_functions import get_stat
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 import traceback
@@ -18,12 +18,14 @@ async def message_edit_text(message: Message, text, inline_kb):
             reply_markup=inline_kb,
             disable_web_page_preview=True)
     except Exception as e:
-        await send_error('', str(e), traceback.format_exc())
+        await send_error(str(message.from_user), str(e), traceback.format_exc())
 
 
-async def message_answer(message: Message, text, inline_kb=None):
-    if inline_kb is None:
+async def message_answer(message: Message, text, incoming_inline_kb=None):
+    if incoming_inline_kb is None:
         inline_kb = InlineKeyboardMarkup(row_width=1)
+    else:
+        inline_kb = incoming_inline_kb
 
     try:
         new_message = await message.answer(
@@ -34,7 +36,7 @@ async def message_answer(message: Message, text, inline_kb=None):
             disable_notification=False,
             protect_content=False)
 
-        if inline_kb is not None:
+        if incoming_inline_kb is not None:
             await base.save_menu_message_id(new_message)
 
     except Exception as e:
@@ -156,5 +158,5 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
 
     text = await get_stat(id_chat, id_user)
 
-    group_name = meaning[10]
+    group_name = shielding(meaning[10])
     return '*Группа "' + group_name + '"\.*\n\n' + text, inline_kb

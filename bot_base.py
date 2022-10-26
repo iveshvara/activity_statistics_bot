@@ -31,7 +31,7 @@ async def send_error(text: str, error_text: str, traceback_text: str):
         if len(traceback_text) < 500:
             traceback_result_text = traceback_text
         else:
-            my_files = ('bot.py', 'handlers.py', 'main.py', 'main_functions.py', 'service.py', 'utility_functions.py')
+            my_files = ('bot_base.py', 'handlers.py', 'main.py', 'main_functions.py', 'service.py', 'utility_functions.py')
             positions_list = []
             traceback_result_text = ''
 
@@ -585,37 +585,49 @@ class Database:
                 text_result = 'None'
             else:
                 text_result = 'users:\n' + get_names_and_values_of_the_request_details(self.cursor.description, result)
-
-                self.cursor.execute("SELECT * FROM chats WHERE id_user = %s", (id_user,))
-                result = self.cursor.fetchone()
-                text_result += '\nchats:\n' + get_names_and_values_of_the_request_details(self.cursor.description,
-                                                                                          result)
-                id_chat = result[0]
-
-                self.cursor.execute(
-                    """SELECT settings.title as group, projects.name as project, enable_group, curators_group FROM settings 
-                    INNER JOIN projects ON projects.project_id = settings.project_id AND id_chat = %s""", (id_chat,))
-                result = self.cursor.fetchone()
-                text_result += '\nsettings:\n' + get_names_and_values_of_the_request_details(self.cursor.description,
-                                                                                             result)
-
-                self.cursor.execute(
-                    """SELECT users.id_user, users.first_name, users.last_name, users.username FROM chats 
-                    INNER JOIN users ON users.id_user = chats.id_user AND not users.role = 'user' AND id_chat = %s""",
-                    (id_chat,))
-                result_tuple = self.cursor.fetchall()
-                text_result += '\nadmins:\n'
-
                 text_result = shielding(text_result)
+                self.cursor.execute(
+                    """SELECT 
+                        chats.id_chat, 
+                        settings.title as name, 
+                        projects.name as project, 
+                        enable_group, 
+                        curators_group,
+                        chats.deleted 
+                    FROM chats 
+                    INNER JOIN settings 
+                        ON chats.id_chat = settings.id_chat 
+                            AND chats.id_user = %s
+                    LEFT JOIN projects 
+                        ON projects.project_id = settings.project_id""", (id_user,))
+                result_chats = self.cursor.fetchall()
+                text_result += '\n\nchats:\n'
+                for i in result_chats:
+                    text_result += shielding('\nchat:\n' + get_names_and_values_of_the_request_details(
+                        self.cursor.description, i))
 
-                for i in result_tuple:
-                    id_user = i[0]
-                    first_name = i[1]
-                    last_name = i[2]
-                    username = i[3]
-                    text_result += await get_name_tg(id_user, first_name, last_name, username) + '\n'
+                    text_result += '\nadmins:\n'
 
-                return text_result
+                    self.cursor.execute(
+                        """SELECT 
+                            users.id_user, 
+                            users.first_name, 
+                            users.last_name, 
+                            users.username 
+                        FROM chats 
+                        INNER JOIN users 
+                            ON users.id_user = chats.id_user 
+                                AND not users.role = 'user' 
+                                AND id_chat = %s""", (i[0],))
+                    result_admins = self.cursor.fetchall()
+                    for ii in result_admins:
+                        id_user = ii[0]
+                        first_name = ii[1]
+                        last_name = ii[2]
+                        username = ii[3]
+                        text_result += await get_name_tg(id_user, first_name, last_name, username) + '\n'
+
+            return text_result
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
@@ -660,5 +672,6 @@ class Database:
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
+
 
 base = Database()
