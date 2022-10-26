@@ -20,12 +20,14 @@ async def command_start(message: Message):
         id_user = message.chat.id
         await last_menu_message_delete(id_user)
 
-        text, inline_kb, one_group = await get_start_menu(id_user)
-        if one_group is None:
-            await message_answer(message, text, inline_kb)
-        else:
-            text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
-            await message_answer(message, text, inline_kb)
+        # text, inline_kb, one_group = await get_start_menu(id_user)
+        # if one_group is None:
+        #     await message_answer(message, text, inline_kb)
+        # else:
+        #     text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
+        #     await message_answer(message, text, inline_kb)
+        text, inline_kb = await get_start_menu(id_user)
+        await message_answer(message, text, inline_kb)
 
 
 @dp.message_handler(commands=['test'])
@@ -184,13 +186,15 @@ async def process_parameter(callback: CallbackQuery):
 @dp.callback_query_handler(text='back')
 async def menu_back(callback: CallbackQuery):
     id_user = callback.from_user.id
-    text, inline_kb, one_group = await get_start_menu(id_user)
-
-    if one_group is None:
-        await callback_edit_text(callback, text, inline_kb)
-    else:
-        text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
-        await callback_edit_text(callback, text, inline_kb)
+    # text, inline_kb, one_group = await get_start_menu(id_user)
+    #
+    # if one_group is None:
+    #     await callback_edit_text(callback, text, inline_kb)
+    # else:
+    #     text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
+    #     await callback_edit_text(callback, text, inline_kb)
+    text, inline_kb = await get_start_menu(id_user)
+    await callback_edit_text(callback, text, inline_kb)
 
 
 @dp.callback_query_handler(text='reg')

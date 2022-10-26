@@ -300,7 +300,7 @@ async def get_start_menu(id_user):
 
     text = 'Меню:'
     inline_kb = InlineKeyboardMarkup(row_width=1)
-    one_group = None
+    # one_group = None
 
     if len(user_groups) == 0:
         if len(meaning) == 0 or not channel_enabled:
@@ -317,8 +317,8 @@ async def get_start_menu(id_user):
             inline_kb = InlineKeyboardMarkup(row_width=1)
             inline_kb.add(AddInlBtn(text='Регистрация', callback_data='reg'))
 
-    elif len(user_groups) == 1:
-        one_group = user_groups[0][0]
+    # elif len(user_groups) == 1:
+    #     one_group = user_groups[0][0]
 
     else:
         text = 'Выберете группу для настройки:'
@@ -360,7 +360,7 @@ async def get_start_menu(id_user):
     if id_user == SUPER_ADMIN_ID:
         inline_kb.add(AddInlBtn(text='[super admin functions]', callback_data='super_admin '))
 
-    return text, inline_kb, one_group
+    return text, inline_kb #, one_group
 
 
 async def homework_kb(project_id, id_user, homework_date=None, status='text'):
