@@ -601,7 +601,7 @@ async def admin_homework_process(project_id, id_user_admin, status, id_user, id_
                 inline_kb.add(AddInlBtn(text=i_title, callback_data=f'admin_homework {project_id} group 0 {i_id_chat}'))
             inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} back_menu_back'))
 
-            text = 'Выберете группу.'
+            text = 'Домашние задания. \nВыберете группу для проверки домашних заданий:'
 
         else:
             text, user_info, inline_kb, status = \
@@ -791,7 +791,7 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
 async def homework_response(project_id, homework_date, id_user, text):
     today = get_today()
     cursor.execute("UPDATE homework_check SET response = %s, status = 'На проверке', date_actual = %s "
-                   "WHERE project_id = %s AND date = %s AND id_user = %s AND status = 'Получено' ",
+                   "WHERE project_id = %s AND date = %s AND id_user = %s",
                    (text, today, project_id, homework_date, id_user))
     connect.commit()
 
