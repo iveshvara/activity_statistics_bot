@@ -26,27 +26,29 @@ async def send_error(text: str, error_text: str, traceback_text: str):
     if error_text is not None and len(error_text) > 0:
         text_message += f'\n\nError text:\n{error_text}'
 
-    if len(traceback_text) < 500:
-        traceback_result_text = traceback_text
-    else:
-        my_files = ('bot.py', 'handlers.py', 'main.py', 'main_functions.py', 'service.py', 'utility_functions.py')
-        positions_list = []
-        traceback_result_text = ''
+    traceback_result_text = ''
+    if traceback_text is not None:
+        if len(traceback_text) < 500:
+            traceback_result_text = traceback_text
+        else:
+            my_files = ('bot.py', 'handlers.py', 'main.py', 'main_functions.py', 'service.py', 'utility_functions.py')
+            positions_list = []
+            traceback_result_text = ''
 
-        for i in my_files:
-            positions = traceback_text.find(i)
-            if positions > -1:
-                positions_list.append(positions)
+            for i in my_files:
+                positions = traceback_text.find(i)
+                if positions > -1:
+                    positions_list.append(positions)
 
-        positions_list.sort()
-        for i in positions_list:
-            part_text = traceback_text[i:]
-            position_part_text = part_text.find('\n')
-            part_text = part_text[:position_part_text]
-            part_text = part_text.replace('py",', 'py,')
-            traceback_result_text += '\n' + part_text
+            positions_list.sort()
+            for i in positions_list:
+                part_text = traceback_text[i:]
+                position_part_text = part_text.find('\n')
+                part_text = part_text[:position_part_text]
+                part_text = part_text.replace('py",', 'py,')
+                traceback_result_text += '\n' + part_text
 
-        traceback_result_text = '\n\nTraceback:' + traceback_result_text
+            traceback_result_text = '\n\nTraceback:' + traceback_result_text
 
     text_message += traceback_result_text
 

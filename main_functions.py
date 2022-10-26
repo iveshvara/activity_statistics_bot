@@ -791,7 +791,7 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
 async def homework_response(project_id, homework_date, id_user, text):
     today = get_today()
     cursor.execute("UPDATE homework_check SET response = %s, status = 'На проверке', date_actual = %s "
-                   "WHERE project_id = %s AND date = %s AND id_user = %s",
+                   "WHERE project_id = %s AND date = %s AND id_user = %s AND NOT status = 'Принято' ",
                    (text, today, project_id, homework_date, id_user))
     connect.commit()
 

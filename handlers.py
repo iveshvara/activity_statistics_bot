@@ -419,7 +419,7 @@ async def message_handler(message):
             await message_delete(message)
 
         elif id_user == 777000:
-            await send_error(message.text, 'id_user = 777000', traceback.format_exc())
+            await send_error(message.content_type, 'id_user = 777000', traceback.format_exc())
 
         elif message.content_type in created_title_content_type:
             title = shielding(message.chat.title)
