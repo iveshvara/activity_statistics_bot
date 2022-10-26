@@ -273,6 +273,7 @@ async def get_stat(id_chat, id_user=None):
 
 
 async def get_start_menu(id_user):
+    # Есть уже в base
     cursor.execute(
         'SELECT DISTINCT settings.id_chat, settings.title, settings.project_id FROM settings '
         'LEFT OUTER JOIN chats ON chats.id_chat = settings.id_chat '
@@ -297,7 +298,7 @@ async def get_start_menu(id_user):
         if not channel_enabled and i[2] > 0:
             channel_enabled = True
 
-    text = ''
+    text = 'Меню:'
     inline_kb = InlineKeyboardMarkup(row_width=1)
     one_group = None
 
@@ -308,7 +309,7 @@ async def get_start_menu(id_user):
             inline_kb = InlineKeyboardMarkup(row_width=1)
             inline_kb.add(AddInlBtn(text='Перейти на сайт.', url='https://ipdt.kz/proekty/'))
 
-        else:
+        elif not await base.registration_done(id_user):
             text = 'Добрый день, дорогой друг! \n\n' \
                    'Команда Института рада приветствовать Вас! \n\n' \
                    'Для того, чтобы получить доступ к материалам, необходимо пройти небольшую регистрацию!'
@@ -324,26 +325,37 @@ async def get_start_menu(id_user):
         for i in user_groups:
             inline_kb.add(AddInlBtn(text=i[1], callback_data=f'id_chat {i[0]}'))
 
-    cursor.execute(
-        'SELECT projects.project_id, projects.name FROM project_administrators '
-        'INNER JOIN projects ON project_administrators.project_id = projects.project_id '
-        'WHERE project_administrators.id_user = %s', (id_user,))
-    meaning = cursor.fetchone()
-    if meaning is not None:
-        project_id = str(meaning[0])
+    # cursor.execute(
+    #     'SELECT projects.project_id, projects.name FROM project_administrators '
+    #     'INNER JOIN projects ON project_administrators.project_id = projects.project_id '
+    #     'WHERE project_administrators.id_user = %s', (id_user,))
+    # meaning = cursor.fetchone()
+    # if meaning is not None:
+    #     project_id = str(meaning[0])
+    #
+    #     cursor.execute('SELECT date FROM homework_text WHERE project_id = %s ORDER BY date DESC LIMIT 1', (project_id,))
+    #     meaning_homework = cursor.fetchone()
+    #     if meaning_homework is not None and not meaning_homework[0] in ('', None):
+    #         admin = await base.its_admin(id_user)
+    #         if admin:
+    #             callback_data = f'admin_homework {project_id}'
+    #         else:
+    #             callback_data = f'homework {project_id} text {meaning_homework[0]}'
+    #         inline_kb.add(AddInlBtn(text='Домашние работы', callback_data=callback_data))
+    #
+    #     inline_kb.add(AddInlBtn(text='[Рассылка по "' + meaning[1] + '"]',
+    #                             callback_data='homework ' + project_id))
 
-        cursor.execute('SELECT date FROM homework_text WHERE project_id = %s ORDER BY date DESC LIMIT 1', (project_id,))
-        meaning_homework = cursor.fetchone()
-        if meaning_homework is not None and not meaning_homework[0] in ('', None):
-            admin = await base.its_admin(id_user)
-            if admin:
-                callback_data = f'admin_homework {project_id}'
-            else:
-                callback_data = f'homework {project_id} text {meaning_homework[0]}'
-            inline_kb.add(AddInlBtn(text='Домашние работы', callback_data=callback_data))
+    project_id, project_name = await base.get_project_by_user(id_user)
+    homework_date = await base.get_date_last_homework(project_id)
+    admin = await base.its_admin(id_user)
+    if admin:
+        inline_kb.add(AddInlBtn(text='Домашние работы', callback_data=f'admin_homework {project_id}'))
+    elif homework_date is not None:
+        inline_kb.add(AddInlBtn(text='Домашние работы', callback_data=f'homework {project_id} text {homework_date}'))
 
-        inline_kb.add(AddInlBtn(text='[Рассылка по "' + meaning[1] + '"]',
-                                callback_data='homework ' + project_id))
+    if await base.its_admin_project(id_user, project_id):
+        inline_kb.add(AddInlBtn(text='[Рассылка по "' + project_name + '"]', callback_data=f'homework {project_id}'))
 
     if id_user == SUPER_ADMIN_ID:
         inline_kb.add(AddInlBtn(text='[super admin functions]', callback_data='super_admin '))

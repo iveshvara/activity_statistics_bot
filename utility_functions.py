@@ -41,6 +41,13 @@ async def message_answer(message: Message, text, inline_kb=None):
         await send_error('', str(e), traceback.format_exc())
 
 
+async def message_delete(message: Message):
+    try:
+        await message.delete()
+    except Exception as e:
+        await send_error('', str(e), traceback.format_exc())
+
+
 async def last_menu_message_delete(id_user):
     message_id = await base.get_menu_message_id(id_user)
     if message_id > 0:

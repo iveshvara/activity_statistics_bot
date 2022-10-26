@@ -1,16 +1,17 @@
 
 from _settings import THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
-from bot import bot, dp, base, cursor, connect
+from bot import bot, dp, base, cursor, connect, send_error
 from main_functions import get_stat, get_start_menu, registration_process, registration_command, \
     admin_homework_process, homework_process, homework_response, homework_kb
 from utility_functions import process_parameter_continuation, callback_edit_text, \
-    message_answer, setting_up_a_chat, last_menu_message_delete
+    message_answer, message_delete, setting_up_a_chat, last_menu_message_delete
 from service import add_buttons_time_selection, its_admin, shielding
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatJoinRequest
 from geopy.geocoders import Yandex
 import requests
 import datetime
+import traceback
 
 
 @dp.message_handler(commands=['start'])
@@ -29,6 +30,8 @@ async def command_start(message: Message):
 
 @dp.message_handler(commands=['test'])
 async def command_start(message: Message):
+    await bot.send_message(text='Start', chat_id=message.from_user.id)
+
     # Перенести пользователей из chats в users
     # cursor.execute('''SELECT DISTINCT chats.id_user, chats.first_name, chats.last_name, chats.username FROM chats
     #                 LEFT JOIN users ON chats.id_user = users.id_user
@@ -83,8 +86,20 @@ async def command_start(message: Message):
     #         connect.commit()
 
     # Очистить 777000
-    cursor.execute('''DELETE FROM chats WHERE id_user = 777000''')
-    connect.commit()
+    # cursor.execute('''DELETE FROM chats WHERE id_user = 777000''')
+    # connect.commit()
+
+    # cursor.execute('''SELECT id_user, registration_field, mail FROM users''')
+    # result = cursor.fetchall()
+    # q = len(result)
+    # for i in result:
+    #     id_user = i[0]
+    #     registration_field = i[1]
+    #     mail = i[2]
+    #     if registration_field is None and mail is not None:
+    #         cursor.execute('''UPDATE users SET registration_field = 'done' WHERE id_user = %s''', (id_user,))
+    #         connect.commit()
+    #         print(id_user, q, result.index(i))
 
     await bot.send_message(text='Done', chat_id=message.from_user.id)
 
@@ -329,57 +344,62 @@ async def message_handler(message):
     id_user = message.from_user.id
 
     if message.chat.type == 'private':
-        if not message.content_type == 'text':
-            return
+        if message.forward_from is not None:
+            if id_user == SUPER_ADMIN_ID:
+                forward_id = message.forward_from.id
+                text_result = await base.get_all_info_about_user(forward_id)
+                await message_answer(message, text_result)
+            else:
+                await message_delete(message)
 
-        text = message.text
+        elif message.content_type == 'text':
+            text = message.text
+            answer_text, project_id, homework_date, homework_id_user = await base.which_menu_to_show(id_user)
 
-        answer_text, project_id, homework_date, homework_id_user = await base.which_menu_to_show(id_user)
+            if answer_text == 'registration':
+                await registration_process(message, text, False)
 
-        if answer_text == 'registration':
-            await registration_process(message, text, False)
+            elif answer_text == 'homework_text':
+                await message_delete(message)
 
-        elif answer_text == 'homework_text':
-            await message.delete()
+                text, inline_kb, status = await homework_process(project_id, id_user, 'confirm', '', text)
+                await message_answer(message, text, inline_kb)
 
-            text, inline_kb, status = await homework_process(project_id, id_user, 'confirm', '', text)
-            await message_answer(message, text, inline_kb)
+            elif answer_text == 'homework_feedback':
+                await message_delete(message)
 
-        elif answer_text == 'homework_feedback':
-            await message.delete()
+                await base.set_homework_feedback(project_id, homework_date, homework_id_user, text, id_user)
 
-            await base.set_homework_feedback(project_id, homework_date, homework_id_user, text, id_user)
+                text, user_info, inline_kb, status = \
+                    await admin_homework_process(project_id, id_user, 'feedback', homework_id_user, 0, homework_date)
 
-            text, user_info, inline_kb, status = \
-                await admin_homework_process(project_id, id_user, 'feedback', homework_id_user, 0, homework_date)
+                text = user_info + shielding(text)
+                message_id = await base.get_menu_message_id(id_user)
+                if message_id > 0:
+                    try:
+                        await bot.edit_message_text(
+                            chat_id=id_user,
+                            message_id=message_id,
+                            text=text,
+                            reply_markup=inline_kb,
+                            parse_mode='MarkdownV2')
+                    except Exception as e:
+                        pass
 
-            text = user_info + shielding(text)
-            message_id = await base.get_menu_message_id(id_user)
-            if message_id > 0:
-                try:
-                    await bot.edit_message_text(
-                        chat_id=id_user,
-                        message_id=message_id,
-                        text=text,
-                        reply_markup=inline_kb,
-                        parse_mode='MarkdownV2')
-                except Exception as e:
-                    pass
+            elif answer_text == 'homework_response':
+                await last_menu_message_delete(id_user)
 
-        elif answer_text == 'homework_response':
-            await last_menu_message_delete(id_user)
+                await homework_response(project_id, homework_date, id_user, text)
 
-            await homework_response(project_id, homework_date, id_user, text)
+                inline_kb = await homework_kb(project_id, id_user, homework_date, 'response')
+                text = shielding(text)
+                await message_answer(message, text, inline_kb)
 
-            inline_kb = await homework_kb(project_id, id_user, homework_date, 'response')
-            text = shielding(text)
-            await message_answer(message, text, inline_kb)
+            else:
+                await message_delete(message)
 
         else:
-            try:
-                await message.delete()
-            except Exception as e:
-                pass
+            await message_delete(message)
 
     else:
         id_chat = message.chat.id
@@ -388,11 +408,14 @@ async def message_handler(message):
         skip_content_type = ('delete_chat_photo', 'migrate_from_chat_id', 'pinned_message')
         created_title_content_type = ('group_chat_created', 'supergroup_chat_created', 'channel_chat_created')
 
-        if len(message.entities) == 1 \
-                and message.entities[0].type == 'bot_command' \
-                or message.content_type in skip_content_type \
-                or id_user == 777000:
+        if message.content_type in skip_content_type:
             pass
+
+        elif len(message.entities) == 1 and message.entities[0].type == 'bot_command':
+            await message_delete(message)
+
+        elif id_user == 777000:
+            await send_error(message.text, 'id_user = 777000', traceback.format_exc())
 
         elif message.content_type in created_title_content_type:
             title = shielding(message.chat.title)

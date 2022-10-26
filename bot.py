@@ -21,9 +21,9 @@ async def send_error(text: str, error_text: str, traceback_text: str):
         return
 
     text_message = f'@{THIS_IS_BOT_NAME} error'
-    if len(text) > 0:
+    if text is not None and len(text) > 0:
         text_message += f'\n\nQuery text:\n{text}'
-    if len(error_text) > 0:
+    if error_text is not None and len(error_text) > 0:
         text_message += f'\n\nError text:\n{error_text}'
 
     if len(traceback_text) < 500:
@@ -56,6 +56,15 @@ async def send_error(text: str, error_text: str, traceback_text: str):
         text_message = f'@{THIS_IS_BOT_NAME} error\n\nQuery text:\n{text[crop_characters]} \<\.\.\.\>\n\nError text:\n{error_text}'
 
     await bot.send_message(text=text_message, chat_id=LOGS_CHANNEL_ID)
+
+
+def get_names_and_values_of_the_request_details(description, result):
+    text_result = ''
+    for i in description:
+        index = description.index(i)
+        text_result += i.name + ': ' + str(result[index]) + '\n'
+
+    return text_result
 
 
 class Database:
@@ -566,5 +575,88 @@ class Database:
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
+    async def get_all_info_about_user(self, id_user):
+        try:
+            self.cursor.execute("SELECT * FROM users WHERE id_user = %s", (id_user,))
+            result = self.cursor.fetchone()
+            if result is None:
+                text_result = 'None'
+            else:
+                text_result = 'users:\n' + get_names_and_values_of_the_request_details(self.cursor.description, result)
+
+                self.cursor.execute("SELECT * FROM chats WHERE id_user = %s", (id_user,))
+                result = self.cursor.fetchone()
+                text_result += '\nchats:\n' + get_names_and_values_of_the_request_details(self.cursor.description,
+                                                                                          result)
+                id_chat = result[0]
+
+                self.cursor.execute(
+                    """SELECT settings.title as group, projects.name as project, enable_group, curators_group FROM settings 
+                    INNER JOIN projects ON projects.project_id = settings.project_id AND id_chat = %s""", (id_chat,))
+                result = self.cursor.fetchone()
+                text_result += '\nsettings:\n' + get_names_and_values_of_the_request_details(self.cursor.description,
+                                                                                             result)
+
+                self.cursor.execute(
+                    """SELECT users.id_user, users.first_name, users.last_name, users.username FROM chats 
+                    INNER JOIN users ON users.id_user = chats.id_user AND not users.role = 'user' AND id_chat = %s""",
+                    (id_chat,))
+                result_tuple = self.cursor.fetchall()
+                text_result += '\nadmins:\n'
+
+                text_result = shielding(text_result)
+
+                for i in result_tuple:
+                    id_user = i[0]
+                    first_name = i[1]
+                    last_name = i[2]
+                    username = i[3]
+                    text_result += await get_name_tg(id_user, first_name, last_name, username) + '\n'
+
+                return text_result
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
+
+    async def registration_done(self, id_user):
+        try:
+            self.cursor.execute("SELECT NOT registration_field = 'done' FROM users WHERE id_user = %s", (id_user,))
+            result = self.cursor.fetchone()
+            if result is None or result[0]:
+                return False
+            else:
+                return True
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
+
+    async def get_project_by_user(self, id_user):
+        try:
+            self.cursor.execute(
+                """SELECT DISTINCT settings.project_id, projects.name FROM chats 
+                INNER JOIN settings ON settings.id_chat = chats.id_chat
+                INNER JOIN projects ON projects.project_id = settings.project_id 
+                AND NOT settings.project_id = 0 AND chats.id_user = %s """, (id_user,))
+            result = self.cursor.fetchone()
+            if result is None:
+                return 0, ''
+            else:
+                return result[0], result[1]
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
+
+    async def its_admin_project(self, id_user, project_id):
+        try:
+            self.cursor.execute("SELECT id_user FROM project_administrators WHERE id_user = %s AND project_id = %s",
+                                (id_user, project_id))
+            result = self.cursor.fetchone()
+            if result is None:
+                return False
+            else:
+                return True
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
 base = Database()
