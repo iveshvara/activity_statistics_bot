@@ -85,26 +85,17 @@ async def command_start(message: Message):
     # cursor.execute('''DELETE FROM chats WHERE id_user = 777000''')
     # connect.commit()
 
-    # cursor.execute('''SELECT id_user, registration_field, mail FROM users''')
-    # result = cursor.fetchall()
-    # q = len(result)
-    # for i in result:
-    #     id_user = i[0]
-    #     registration_field = i[1]
-    #     mail = i[2]
-    #     if registration_field is None and mail is not None:
-    #         cursor.execute('''UPDATE users SET registration_field = 'done' WHERE id_user = %s''', (id_user,))
-    #         connect.commit()
-    #         print(id_user, q, result.index(i))
-
-    cursor.execute('''SELECT id_chat, title FROM settings''')
+    cursor.execute('''SELECT id_user, registration_field, mail FROM users''')
     result = cursor.fetchall()
+    q = len(result)
     for i in result:
-        id_chat = i[0]
-        title = i[1]
-        title = title.replace('\\', '')
-        cursor.execute('''UPDATE settings SET title = %s WHERE id_chat = %s''', (title, id_chat))
-        connect.commit()
+        id_user = i[0]
+        registration_field = i[1]
+        mail = i[2]
+        if registration_field is None and mail is not None:
+            cursor.execute('''UPDATE users SET registration_field = 'done' WHERE id_user = %s''', (id_user,))
+            connect.commit()
+            print(id_user, q, result.index(i))
 
     await bot.send_message(text='Done', chat_id=message.from_user.id)
 

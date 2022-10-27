@@ -184,18 +184,15 @@ class Database:
             result = self.cursor.fetchone()
 
             if result is None:
-                text = """INSERT INTO users (id_user, first_name, last_name, username, language_code, 
-                       registration_date, registration_field, fio, address, tel, mail, projects) 
-                       VALUES (%s, %s, %s, %s, %s, %s, NULL, NULL, NULL, NULL, NULL, NULL)"""
+                text = """INSERT INTO users (id_user, first_name, last_name, username, language_code, registration_date) 
+                       VALUES (%s, %s, %s, %s, %s, %s)"""
                 values = (id_user, first_name, last_name, username, language_code, get_today())
             else:
                 text = """UPDATE users SET 
                             first_name = %s, 
                             last_name = %s, 
                             username = %s, 
-                            language_code = %s, 
-                            registration_field = NULL, 
-                            projects = NULL 
+                            language_code = %s 
                        WHERE id_user = %s"""
                 values = (first_name, last_name, username, language_code, id_user)
             self.cursor.execute(text, values)

@@ -300,7 +300,6 @@ async def get_start_menu(id_user):
 
     text = 'Меню:'
     inline_kb = InlineKeyboardMarkup(row_width=1)
-    # one_group = None
 
     if len(user_groups) == 0:
         if len(meaning) == 0 or not channel_enabled:
@@ -317,34 +316,10 @@ async def get_start_menu(id_user):
             inline_kb = InlineKeyboardMarkup(row_width=1)
             inline_kb.add(AddInlBtn(text='Регистрация', callback_data='reg'))
 
-    # elif len(user_groups) == 1:
-    #     one_group = user_groups[0][0]
-
     else:
         text = 'Выберете группу для настройки:'
         for i in user_groups:
             inline_kb.add(AddInlBtn(text=i[1], callback_data=f'id_chat {i[0]}'))
-
-    # cursor.execute(
-    #     'SELECT projects.project_id, projects.name FROM project_administrators '
-    #     'INNER JOIN projects ON project_administrators.project_id = projects.project_id '
-    #     'WHERE project_administrators.id_user = %s', (id_user,))
-    # meaning = cursor.fetchone()
-    # if meaning is not None:
-    #     project_id = str(meaning[0])
-    #
-    #     cursor.execute('SELECT date FROM homework_text WHERE project_id = %s ORDER BY date DESC LIMIT 1', (project_id,))
-    #     meaning_homework = cursor.fetchone()
-    #     if meaning_homework is not None and not meaning_homework[0] in ('', None):
-    #         admin = await base.its_admin(id_user)
-    #         if admin:
-    #             callback_data = f'admin_homework {project_id}'
-    #         else:
-    #             callback_data = f'homework {project_id} text {meaning_homework[0]}'
-    #         inline_kb.add(AddInlBtn(text='Домашние работы', callback_data=callback_data))
-    #
-    #     inline_kb.add(AddInlBtn(text='[Рассылка по "' + meaning[1] + '"]',
-    #                             callback_data='homework ' + project_id))
 
     project_id, project_name = await base.get_project_by_user(id_user)
     homework_date = await base.get_date_last_homework(project_id)
@@ -360,7 +335,7 @@ async def get_start_menu(id_user):
     if id_user == SUPER_ADMIN_ID:
         inline_kb.add(AddInlBtn(text='[super admin functions]', callback_data='super_admin '))
 
-    return text, inline_kb #, one_group
+    return text, inline_kb
 
 
 async def homework_kb(project_id, id_user, homework_date=None, status='text'):
@@ -808,9 +783,8 @@ async def registration_command(callback_message):
             (id_user, first_name, last_name, username, language_code, today))
     else:
         cursor.execute(
-            'UPDATE users SET first_name = %s, last_name = %s, username = %s, language_code = %s, '
-            'registration_field = NULL, projects = NULL '
-            'WHERE id_user = %s', (first_name, last_name, username, language_code, id_user))
+            "UPDATE users SET first_name = %s, last_name = %s, username = %s, language_code = %s WHERE id_user = %s",
+            (first_name, last_name, username, language_code, id_user))
     connect.commit()
 
     if type(callback_message) == CallbackQuery:
