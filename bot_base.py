@@ -291,7 +291,26 @@ class Database:
                     users.last_name, 
                     users.username, 
                     users.fio, 
-                    COUNT(homework_check.id_user) 
+                    CASE
+                        WHEN users.fio IS NULL
+                            THEN concat(users.first_name, ' ', users.last_name) 
+                        ELSE users.fio 
+                    END AS name, 
+                    SUM(CASE 
+                        WHEN homework_check.status = 'На проверке' 
+                            THEN 1 
+                        ELSE 0 
+                    END) AS НаПроверке,
+                    SUM(CASE 
+                        WHEN homework_check.status = 'Принято'
+                            THEN 1
+                        ELSE 0 
+                    END) AS Принято,
+                    SUM(CASE 
+                        WHEN homework_check.status IN ('Получено', 'Возвращено')
+                            THEN 1
+                        ELSE 0 
+                    END) AS Получено
                 FROM users
                     INNER JOIN chats 
                         ON users.id_user = chats.id_user 
@@ -299,8 +318,7 @@ class Database:
                             AND users.role = 'user' 
                 LEFT JOIN homework_check 
                     ON homework_check.project_id = %s 
-                        AND homework_check.id_user = chats.id_user 
-                        AND homework_check.status = 'На проверке' 
+                        AND homework_check.id_user = chats.id_user  
                 WHERE 
                     chats.id_chat = %s 
                 GROUP BY 
@@ -308,9 +326,14 @@ class Database:
                     users.first_name, 
                     users.last_name, 
                     users.username, 
-                    users.fio
+                    users.fio, 
+                    CASE 
+                        WHEN users.fio IS NULL
+                            THEN concat(users.first_name, ' ', users.last_name)
+                        ELSE users.fio 
+                    END
                 ORDER BY
-                    COUNT(homework_check.id_user) DESC""", (project_id, id_chat))
+                    НаПроверке DESC, Принято, name""", (project_id, id_chat))
             result = self.cursor.fetchall()
 
             return result

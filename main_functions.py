@@ -292,7 +292,7 @@ async def get_start_menu(id_user):
             pass
 
         if get:
-            title_result = i[1].replace('\\', '')
+            title_result = i[1]
             user_groups.append([i[0], title_result])
 
         if not channel_enabled and i[2] > 0:
@@ -510,33 +510,22 @@ async def admin_homework_process(project_id, id_user_admin, status, id_user, id_
             title = current_chat[1]
             users = await base.get_users_in_chats(project_id, id_chat)
             all_users = len(users)
-            # row_counter = 0
             counter_users = 0
             counter_homeworks = 0
-            text = title.replace('\\', '') + '\n'
+            text = title + '\n'
 
             for i in users:
                 i_id_user = i[0]
-                i_first_name = i[1]
-                i_last_name = i[2]
-                i_username = i[3]
-                i_fio = i[4]
-                i_count = i[5]
+                i_name = i[5]
+                i_count = i[6]
 
                 if i_count > 0:
                     counter_users +=1
                     counter_homeworks += i_count
 
-                if i_fio is None:
-                    text_btn = i_first_name
-                    if i_last_name is not None:
-                        text_btn += ' ' + i_last_name
-                else:
-                    text_btn = i_fio
-                text_btn += ' ' + str(i_count)
-
-                callback_data = f'admin_homework {project_id} text {i_id_user} {id_chat} {homework_date}'
-                inline_kb.add(AddInlBtn(text=text_btn, callback_data=callback_data))
+                inline_kb.add(AddInlBtn(
+                    text=i_name + ' ' + str(i_count),
+                    callback_data=f'admin_homework {project_id} text {i_id_user} {id_chat} {homework_date}'))
 
             inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} back {id_user_admin}'))
 
@@ -597,7 +586,7 @@ async def admin_homework_process(project_id, id_user_admin, status, id_user, id_
             chats = await base.get_chats_admin_user(project_id, id_user_admin, id_chat)
             for i in chats:
                 i_id_chat = i[0]
-                i_title = i[1].replace('\\', '')
+                i_title = i[1]
                 inline_kb.add(AddInlBtn(text=i_title, callback_data=f'admin_homework {project_id} group 0 {i_id_chat}'))
             inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} back_menu_back'))
 

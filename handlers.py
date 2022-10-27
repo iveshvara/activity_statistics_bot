@@ -20,12 +20,6 @@ async def command_start(message: Message):
         id_user = message.chat.id
         await last_menu_message_delete(id_user)
 
-        # text, inline_kb, one_group = await get_start_menu(id_user)
-        # if one_group is None:
-        #     await message_answer(message, text, inline_kb)
-        # else:
-        #     text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
-        #     await message_answer(message, text, inline_kb)
         text, inline_kb = await get_start_menu(id_user)
         await message_answer(message, text, inline_kb)
 
@@ -195,13 +189,6 @@ async def process_parameter(callback: CallbackQuery):
 @dp.callback_query_handler(text='back')
 async def menu_back(callback: CallbackQuery):
     id_user = callback.from_user.id
-    # text, inline_kb, one_group = await get_start_menu(id_user)
-    #
-    # if one_group is None:
-    #     await callback_edit_text(callback, text, inline_kb)
-    # else:
-    #     text, inline_kb = await setting_up_a_chat(one_group, id_user, False)
-    #     await callback_edit_text(callback, text, inline_kb)
     text, inline_kb = await get_start_menu(id_user)
     await callback_edit_text(callback, text, inline_kb)
 
@@ -398,6 +385,13 @@ async def message_handler(message):
                             parse_mode='MarkdownV2')
                     except Exception as e:
                         pass
+
+                homework_text = shielding('На ваше домашнее задание получен отклик куратора.')
+                homework_inline_kb = InlineKeyboardMarkup(row_width=1)
+                homework_inline_kb.add(InlineKeyboardButton(
+                    text='Посмотреть',
+                    callback_data=f'homework {project_id} feedback {homework_date}'))
+                await bot.send_message(text=homework_text, chat_id=homework_id_user, reply_markup=homework_inline_kb)
 
             elif answer_text == 'homework_response':
                 await last_menu_message_delete(id_user)
