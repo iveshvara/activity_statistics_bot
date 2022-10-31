@@ -144,15 +144,15 @@ class Database:
                             AND id_user = %s""",
                     (date_of_the_last_message, id_chat, id_user))
 
-                self.cursor.execute(
-                    """SELECT 
-                        projects.channel_id 
-                    FROM settings 
-                        INNER JOIN projects 
-                        ON settings.project_id = projects.project_id 
-                            AND NOT projects.channel_id = 0 
-                            AND settings.id_chat = %s""", (id_chat,))
-                return self.cursor.fetchone()
+            self.cursor.execute(
+                """SELECT 
+                    projects.channel_id 
+                FROM settings 
+                    INNER JOIN projects 
+                    ON settings.project_id = projects.project_id 
+                        AND NOT projects.channel_id = 0 
+                        AND settings.id_chat = %s""", (id_chat,))
+            return self.cursor.fetchone()
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
@@ -331,6 +331,46 @@ class Database:
                     END
                 ORDER BY
                     НаПроверке DESC, Принято, name""", (project_id, id_chat))
+            result = self.cursor.fetchall()
+
+            return result
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
+
+    async def get_users_status_homeworks_in_chats(self, project_id, id_chat):
+        try:
+            self.cursor.execute(
+                """SELECT DISTINCT
+                    homework_check.status, 
+                    users.id_user, 
+                    CASE
+                        WHEN users.fio IS NULL
+                            THEN concat(users.first_name, ' ', users.last_name) 
+                        ELSE users.fio 
+                    END AS name,
+                    CASE
+                        WHEN homework_check.status = 'На проверке'
+                            THEN 0
+                        WHEN homework_check.status = 'Возвращено'
+                            THEN 1
+                        WHEN homework_check.status = 'Получено'
+                            THEN 2
+                        ELSE 3 
+                    END AS sorting
+                FROM users
+                    INNER JOIN chats 
+                        ON users.id_user = chats.id_user 
+                            AND NOT chats.deleted 
+                            AND users.role = 'user' 
+                LEFT JOIN homework_check 
+                    ON homework_check.project_id = %s 
+                        AND homework_check.id_user = chats.id_user  
+                WHERE 
+                    chats.id_chat = %s 
+                ORDER BY
+                    sorting,
+                    name""", (project_id, id_chat))
             result = self.cursor.fetchall()
 
             return result

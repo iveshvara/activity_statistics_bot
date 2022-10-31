@@ -85,17 +85,17 @@ async def command_start(message: Message):
     # cursor.execute('''DELETE FROM chats WHERE id_user = 777000''')
     # connect.commit()
 
-    cursor.execute('''SELECT id_user, registration_field, mail FROM users''')
-    result = cursor.fetchall()
-    q = len(result)
-    for i in result:
-        id_user = i[0]
-        registration_field = i[1]
-        mail = i[2]
-        if registration_field is None and mail is not None:
-            cursor.execute('''UPDATE users SET registration_field = 'done' WHERE id_user = %s''', (id_user,))
-            connect.commit()
-            print(id_user, q, result.index(i))
+    # cursor.execute('''SELECT id_user, registration_field, mail FROM users''')
+    # result = cursor.fetchall()
+    # q = len(result)
+    # for i in result:
+    #     id_user = i[0]
+    #     registration_field = i[1]
+    #     mail = i[2]
+    #     if registration_field is None and mail is not None:
+    #         cursor.execute('''UPDATE users SET registration_field = 'done' WHERE id_user = %s''', (id_user,))
+    #         connect.commit()
+    #         print(id_user, q, result.index(i))
 
     await bot.send_message(text='Done', chat_id=message.from_user.id)
 
@@ -123,6 +123,8 @@ async def choosing_a_chat_to_set_up(callback: CallbackQuery):
     id_user = callback.from_user.id
     text, inline_kb = await setting_up_a_chat(id_chat, id_user)
     await callback_edit_text(callback, text, inline_kb)
+
+    await callback.answer()
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('settings '))
@@ -176,6 +178,8 @@ async def process_parameter(callback: CallbackQuery):
 
         await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value)
 
+    await callback.answer()
+
 
 @dp.callback_query_handler(text='back')
 async def menu_back(callback: CallbackQuery):
@@ -183,10 +187,14 @@ async def menu_back(callback: CallbackQuery):
     text, inline_kb = await get_start_menu(id_user)
     await callback_edit_text(callback, text, inline_kb)
 
+    await callback.answer()
+
 
 @dp.callback_query_handler(text='reg')
 async def reg_command_callback(callback: CallbackQuery):
     await registration_command(callback)
+
+    await callback.answer()
 
 
 @dp.message_handler(commands=['reg'])
@@ -201,13 +209,13 @@ async def skip_action(callback: CallbackQuery):
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('gender ') or x.data.startswith('projects '))
 async def gender_processing(callback: CallbackQuery):
-    await callback.answer()
-
     value = callback.data
     value = value.replace('gender ', '')
     value = value.replace('projects ', '')
 
     await registration_process(callback.message, value, True)
+
+    await callback.answer()
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('super_admin '))
@@ -250,6 +258,8 @@ async def super_admin_functions(callback: CallbackQuery):
         text, inline_kb = await setting_up_a_chat(id_chat, id_user, False, True)
         await callback_edit_text(callback, text, inline_kb)
 
+    await callback.answer()
+
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('homework '))
 async def homework_functions(callback: CallbackQuery):
@@ -274,6 +284,8 @@ async def homework_functions(callback: CallbackQuery):
         pass
     else:
         await callback_edit_text(callback, text, inline_kb)
+
+    await callback.answer()
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('admin_homework '))
@@ -304,6 +316,8 @@ async def admin_homework_functions(callback: CallbackQuery):
         await menu_back(callback)
     else:
         await callback_edit_text(callback, text, inline_kb)
+
+    await callback.answer()
 
 
 @dp.chat_join_request_handler()
@@ -413,7 +427,9 @@ async def message_handler(message):
             await message_delete(message)
 
         elif id_user == 777000:
-            await send_error(message.content_type, 'id_user = 777000', traceback.format_exc())
+            # TODO
+            # await send_error(message.content_type, 'id_user = 777000', traceback.format_exc())
+            pass
 
         elif message.content_type in created_title_content_type:
             await base.save_new_chat(id_chat, message.chat.title)

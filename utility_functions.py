@@ -11,6 +11,8 @@ async def callback_edit_text(callback: CallbackQuery, text, inline_kb):
 
 
 async def message_edit_text(message: Message, text, inline_kb):
+    if message.md_text == text and message.reply_markup == inline_kb:
+        return
     try:
         await message.edit_text(
             text,
