@@ -248,8 +248,10 @@ class Database:
         try:
             self.cursor.execute("SELECT role = 'admin' FROM users WHERE id_user = %s", (id_user,))
             result = self.cursor.fetchone()
-
-            return result[0]
+            if result is None:
+                return False
+            else:
+                return result[0]
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
