@@ -132,7 +132,10 @@ class Database:
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-    async def save_user_disable_in_chat(self, id_chat, id_user, date_of_the_last_message):
+    async def save_user_disable_in_chat(self, id_chat, id_user, date_of_the_last_message=None):
+        if date_of_the_last_message is None:
+            date_of_the_last_message = get_today()
+
         try:
             with self.connect:
                 self.cursor.execute(
