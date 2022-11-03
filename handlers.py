@@ -1,20 +1,19 @@
 
 from _settings import THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
-from bot_base import bot, dp, base, cursor, connect, send_error
+from bot_base import bot, dp, base, cursor, connect
 from main_functions import get_stat, get_start_menu, registration_process, registration_command, \
-    admin_homework_process, homework_process, homework_response, homework_kb
-from utility_functions import process_parameter_continuation, callback_edit_text, \
-    message_answer, message_delete, setting_up_a_chat, last_menu_message_delete
+    admin_homework_process, homework_process, homework_response, homework_kb, \
+    process_parameter_continuation, setting_up_a_chat
+from utility_functions import callback_edit_text, message_answer, message_delete, last_menu_message_delete, message_send
 from service import add_buttons_time_selection, its_admin, shielding
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatJoinRequest
 from geopy.geocoders import Yandex
 import requests
 import datetime
-import traceback
 
 
-@dp.message_handler(commands=['start'])
+@dp.message_handler(commands=['start', 'menu'])
 async def command_start(message: Message):
     if message.chat.type == 'private':
         id_user = message.chat.id
@@ -26,8 +25,7 @@ async def command_start(message: Message):
 
 @dp.message_handler(commands=['test'])
 async def command_start(message: Message):
-    await bot.send_message(text='Start', chat_id=message.from_user.id)
-
+    await message_send(message.from_user.id, 'Start')
     # Перенести пользователей из chats в users
     # cursor.execute('''SELECT DISTINCT chats.id_user, chats.first_name, chats.last_name, chats.username FROM chats
     #                 LEFT JOIN users ON chats.id_user = users.id_user
@@ -35,7 +33,7 @@ async def command_start(message: Message):
     # meaning = cursor.fetchall()
     # for i in meaning:
     #     cursor.execute(
-    #         'INSERT INTO users (id_user, first_name, last_name, username, language_code, registration_date, registration_field, message_id, gender, fio, birthdate, address, tel, mail, projects) '
+    #         'INSERT INTO users (id_user, first_name, last_name, username, language_code, registration_date, registration_field, message_idmessage_id, gender, fio, birthdate, address, tel, mail, projects) '
     #         'VALUES (%s, %s, %s, %s, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)',
     #         (i[0], i[1], i[2], i[3]))
     #     connect.commit()
@@ -97,7 +95,7 @@ async def command_start(message: Message):
     #         connect.commit()
     #         print(id_user, q, result.index(i))
 
-    await bot.send_message(text='Done', chat_id=message.from_user.id)
+    await message_send(message.from_user.id, 'Done')
 
 
 @dp.message_handler(commands=['get_stat'])
@@ -341,7 +339,7 @@ async def join(update: ChatJoinRequest):
             pass
 
     text = shielding(text)
-    await bot.send_message(text=text, chat_id=id_user, reply_markup=inline_kb, parse_mode='MarkdownV2')
+    await message_send(id_user, text, inline_kb)
 
 
 @dp.message_handler(content_types='any')
@@ -396,7 +394,7 @@ async def message_handler(message):
                 homework_inline_kb.add(InlineKeyboardButton(
                     text='Посмотреть',
                     callback_data=f'homework {project_id} feedback {homework_date}'))
-                await bot.send_message(text=homework_text, chat_id=homework_id_user, reply_markup=homework_inline_kb)
+                await message_send(homework_id_user, homework_text, homework_inline_kb)
 
             elif answer_text == 'homework_response':
                 await last_menu_message_delete(id_user)
@@ -448,7 +446,7 @@ async def message_handler(message):
                         await base.save_or_update_new_title(id_chat, message.chat.title)
 
                         text = f'Добавлена новая группа "{message.chat.title}"'
-                        await bot.send_message(text=text, chat_id=SUPER_ADMIN_ID)
+                        await message_send(SUPER_ADMIN_ID, text)
 
                 else:
 

@@ -1,11 +1,10 @@
 
-from bot_base import dp, send_error
+from bot_base import dp
 from aiogram.utils import executor
 import logging
 import asyncio
 import aioschedule
 from main_functions import run_reminder
-import traceback
 import handlers
 
 logging.basicConfig(level=logging.INFO)

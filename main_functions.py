@@ -1,7 +1,9 @@
 
 from bot_base import bot, cursor, connect, base, send_error
 from _settings import SUPER_ADMIN_ID
-from service import its_admin, shielding, get_name_tg, reduce_large_numbers, get_today, message_requirements
+from service import its_admin, shielding, get_name_tg, reduce_large_numbers, get_today, message_requirements, \
+    convert_bool, convert_bool_binary
+from utility_functions import message_delete_by_id, callback_edit_text, message_send
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton as AddInlBtn
 # from aiogram.contrib.middlewares.logging import LoggingMiddleware
 import datetime
@@ -15,11 +17,7 @@ async def run_reminder():
         text = await get_stat(id_chat)
 
         if not text == '':
-            try:
-                await bot.send_message(text=text, chat_id=id_chat, parse_mode='MarkdownV2', disable_notification=True)
-            except Exception as e:
-                await send_error(text, str(e), traceback.format_exc())
-
+            await message_send(id_chat, text, disable_notification=True)
             await base.save_last_notify_date_reminder(id_chat)
 
     # text = ''
@@ -470,10 +468,9 @@ async def admin_homework_process(project_id, id_user_admin, status, id_user, id_
     text, user_info, inline_kb = '', '', InlineKeyboardMarkup(row_width=1)
 
     separator = status.find('/')
-    if separator == -1:
-        status_back = 'На_проверке'
-        status_number = '1'
-    else:
+    status_back = 'На_проверке'
+    status_number = '1'
+    if separator > -1:
         status_number = status[separator+1:]
         if status_number == '1':
             status_back = 'На_проверке'
@@ -676,7 +673,7 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
         meaning = cursor.fetchone()
         if meaning is not None:
             try:
-                await bot.delete_message(id_user, meaning[0])
+                await message_delete_by_id(id_user, meaning[0])
             except Exception as e:
                 pass
 
@@ -719,14 +716,11 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
                     AND settings.project_id = %s
             INNER JOIN users 
                 ON chats.id_user = users.id_user 
-            --INNER JOIN project_administrators 
+            -- INNER JOIN project_administrators 
             --    ON users.id_user = project_administrators.id_user''',
             (project_id,)
         )
         meaning = cursor.fetchall()
-
-        last_i_id_chat = None
-        chat_admins = None
         for i in meaning:
             i_id_user = i[0]
             i_message_id = i[1]
@@ -740,21 +734,13 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
 
                 inline_kb = await homework_kb(project_id, i_id_user, date)
 
-            if i_message_id > 0:
-                try:
-                    await bot.delete_message(chat_id=i_id_user, message_id=i_message_id)
-                except Exception as e:
-                    pass
+            else:
+                i_text, inline_kb = await get_start_menu(i_id_user)
 
-            try:
-                message = await bot.send_message(text=sending_text, chat_id=i_id_user, reply_markup=inline_kb)
-                if its_homework:
-                    homework_message_id_text = message.message_id
-                    cursor.execute('UPDATE users SET menu_message_id = %s WHERE id_user = %s',
-                                   (homework_message_id_text, id_user))
-                    connect.commit()
-            except Exception as e:
-                await send_error('', str(e), traceback.format_exc())
+            if i_message_id > 0:
+                await message_delete_by_id(i_id_user, i_message_id)
+
+            await message_send(i_id_user, text, inline_kb)
 
         cursor.execute(
             'UPDATE project_administrators SET status = NULL, text = NULL, message_id = 0 '
@@ -967,7 +953,7 @@ async def registration_process(message: Message, meaning='', its_callback=False)
     #             # invite_link = result.invite_link
     # 
     #             inline_kb = InlineKeyboardMarkup(row_width=1)
-    #             inline_kb.add(AddInlBtn('Заявка на вступление', url=invite_link))
+    #             inline_kb.add(AddInlBtn('Заявка на вступление', url=invite_link`))
     # 
     #             text = 'Шаг 8 из 7. \nУчебные материалы будут выкладываться в канал. Подайте заявку на вступление (будет принята автоматически).'
     #     else:
@@ -982,20 +968,14 @@ async def registration_process(message: Message, meaning='', its_callback=False)
 
     if delete_my_message:
         if message_id is not None and not message_id == '' and not message_id == message.message_id:
-            try:
-                await bot.delete_message(chat_id=id_user, message_id=message_id)
-            except Exception as e:
-                pass
+            await message_delete_by_id(id_user, message_id)
         try:
             await message.delete()
         except Exception as e:
             pass
 
         if not text == '':
-            try:
-                message = await bot.send_message(text=text, chat_id=id_user, reply_markup=inline_kb, parse_mode='MarkdownV2')
-            except Exception as e:
-                pass
+            await message_send(id_user, text, inline_kb)
 
     if registration_field == 'done':
         return
@@ -1021,3 +1001,106 @@ async def registration_process(message: Message, meaning='', its_callback=False)
         connect.commit()
     except Exception as e:
         await send_error('', str(e), traceback.format_exc())
+
+
+async def process_parameter_continuation(callback: CallbackQuery, id_chat, id_user, parameter_name, parameter_value):
+    cursor.execute(f'UPDATE settings SET {parameter_name} = %s WHERE id_chat = %s', (parameter_value, id_chat))
+    connect.commit()
+
+    text, inline_kb = await setting_up_a_chat(id_chat, id_user)
+    await callback_edit_text(callback, text, inline_kb)
+
+
+async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=False):
+    cursor.execute(
+        '''SELECT 
+            settings.statistics_for_everyone,
+            settings.include_admins_in_statistics,
+            settings.sort_by_messages,
+            settings.do_not_output_the_number_of_messages,
+            settings.do_not_output_the_number_of_characters,
+            settings.period_of_activity,
+            settings.report_enabled,
+            coalesce(projects.name, ''),
+            settings.do_not_output_name_from_registration,
+            settings.check_channel_subscription,
+            settings.title	
+        FROM settings 
+            LEFT OUTER JOIN projects 
+                ON settings.project_id = projects.project_id
+        WHERE 
+            enable_group 
+            AND id_chat = %s''', (id_chat,)
+    )
+    meaning = cursor.fetchone()
+
+    if meaning is None:
+        return '', ''
+
+    inline_kb = InlineKeyboardMarkup(row_width=1)
+    if meaning[0]:
+        text='Статистика доступна всем'
+    else:
+        text='Статистика доступна только администраторам'
+    inline_kb.add(AddInlBtn(
+        text=text,
+        callback_data=f'settings {id_chat} statistics_for_everyone {convert_bool_binary(meaning[0])}'))
+
+    inline_kb.add(AddInlBtn(
+        text='Включать админов в статистику: ' + convert_bool(meaning[1]),
+        callback_data=f'settings {id_chat} include_admins_in_statistics {convert_bool_binary(meaning[1])}'))
+
+    if meaning[2]:
+        text='Сортировка по сообщениям'
+    else:
+        text = 'Сортировка по количеству символов'
+    inline_kb.add(AddInlBtn(
+        text=text,
+        callback_data=f'settings {id_chat} sort_by_messages {convert_bool_binary(meaning[2])}'))
+
+    inline_kb.add(AddInlBtn(
+        text='Не выводить количество сообщений: ' + convert_bool(meaning[3]),
+        callback_data=f'settings {id_chat} do_not_output_the_number_of_messages {convert_bool_binary(meaning[3])}'))
+
+    inline_kb.add(AddInlBtn(
+        text='Не выводить количество символов: ' + convert_bool(meaning[4]),
+        callback_data=f'settings {id_chat} do_not_output_the_number_of_characters {convert_bool_binary(meaning[4])}'))
+
+    inline_kb.add(AddInlBtn(
+        text='Статистика за период (дней): ' + str(meaning[5]),
+        callback_data=f'settings {id_chat} period_of_activity {meaning[5]}'))
+
+    inline_kb.add(AddInlBtn(
+        text='Автоматический отчет в чат: ' + convert_bool(meaning[6]),
+        callback_data=f'settings {id_chat} report_enabled {convert_bool_binary(meaning[6])}'))
+
+    inline_kb.add(AddInlBtn(
+        text='Проект: ' + meaning[7],
+        callback_data=f'settings {id_chat} project_name'))
+
+    if meaning[8]:
+        text='Имя и фамилия пользователя'
+    else:
+        text = 'Имя и фамилия из регистрации'
+    inline_kb.add(AddInlBtn(
+        text=text,
+        callback_data=f'settings {id_chat} do_not_output_name_from_registration {convert_bool_binary(meaning[8])}'))
+
+    check_channel_subscription = meaning[9]
+    check_channel_subscription_on = ''
+    if check_channel_subscription:
+        check_channel_subscription_on = ' ⚠️'
+    inline_kb.add(AddInlBtn(
+        text='Проверять подписку на канал️: ' + convert_bool(meaning[9]) + check_channel_subscription_on,
+        callback_data=f'settings {id_chat} check_channel_subscription {convert_bool_binary(meaning[9])}'))
+
+    if back_button:
+        inline_kb.add(AddInlBtn(text='Назад', callback_data='back'))
+
+    if super_admin:
+        inline_kb.add(AddInlBtn(text='Назад', callback_data='super_admin '))
+
+    text = await get_stat(id_chat, id_user)
+
+    group_name = shielding(meaning[10])
+    return '*Группа "' + group_name + '"\.*\n\n' + text, inline_kb
