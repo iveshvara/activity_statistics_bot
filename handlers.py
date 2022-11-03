@@ -22,6 +22,9 @@ async def command_start(message: Message):
         text, inline_kb = await get_start_menu(id_user)
         await message_answer(message, text, inline_kb)
 
+    else:
+        await message_delete(message)
+
 
 @dp.message_handler(commands=['test'])
 async def command_start(message: Message):
@@ -102,17 +105,17 @@ async def command_start(message: Message):
 async def command_get_stat(message: Message):
     if message.chat.type == 'private':
         await message.answer('Эта команда работает в группе. Здесь используйте команду /start')
-        return
 
-    await message_handler(message)
+    else:
+        await message_handler(message)
 
-    id_chat = message.chat.id
-    id_user = message.from_user.id
+        id_chat = message.chat.id
+        id_user = message.from_user.id
 
-    text = await get_stat(id_chat, id_user)
+        text = await get_stat(id_chat, id_user)
 
-    if not text == '':
-        await message_answer(message, text)
+        if not text == '':
+            await message_answer(message, text)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('id_chat '))

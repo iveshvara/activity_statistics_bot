@@ -70,14 +70,16 @@ async def message_delete(message: Message):
     try:
         await message.delete()
     except Exception as e:
-        await send_error(str(message.chat), str(e), traceback.format_exc())
+        # await send_error(str(message.chat), str(e), traceback.format_exc())
+        pass
 
 
 async def message_delete_by_id(id_user, message_id):
     try:
         await bot.delete_message(chat_id=id_user, message_id=message_id)
     except Exception as e:
-        await send_error('id_user: '  + str(id_user) + '\nmessage_id: ' + str(message_id), str(e), traceback.format_exc())
+        # await send_error('id_user: ' + str(id_user) + '\nmessage_id: ' + str(message_id), str(e), traceback.format_exc())
+        pass
 
 
 async def last_menu_message_delete(id_user):
