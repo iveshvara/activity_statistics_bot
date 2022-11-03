@@ -38,6 +38,9 @@ async def command_start(message: Message):
         id_chat = i[0]
         id_user = i[1]
         member = False
+
+        print(result.index(i), id_chat, id_user)
+
         try:
             chat_member = await bot.get_chat_member(id_chat, id_user)
             member = not chat_member.status == 'left'
@@ -51,8 +54,11 @@ async def command_start(message: Message):
             result = await base.save_user_disable_in_chat(id_chat, id_user)
             if result is not None:
                 channel_id = result[0]
-                await bot.kick_chat_member(channel_id, id_user)
-                await bot.unban_chat_member(channel_id, id_user)
+                try:
+                    await bot.kick_chat_member(channel_id, id_user)
+                    await bot.unban_chat_member(channel_id, id_user)
+                except Exception as e:
+                    pass
 
         # if not await base.application_for_membership(id_user) is None:
 
