@@ -34,12 +34,15 @@ async def command_start(message: Message):
     # member = chat_member.status == 'member'
     cursor.execute('''SELECT * FROM chats WHERE NOT deleted''')
     result = cursor.fetchall()
+    count = 0
+    all_count = len(result)
+
     for i in result:
         id_chat = i[0]
         id_user = i[1]
         member = False
-
-        print(result.index(i), id_chat, id_user)
+        count += 1
+        print(count, all_count, id_chat, id_user)
 
         try:
             chat_member = await bot.get_chat_member(id_chat, id_user)
