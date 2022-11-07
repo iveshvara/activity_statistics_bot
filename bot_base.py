@@ -106,7 +106,7 @@ class Database:
         try:
             with self.connect:
                 self.cursor.execute("UPDATE chats SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
-                self.cursor.execute("UPDATE meetings SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
+                # self.cursor.execute("UPDATE meetings SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
                 self.cursor.execute("UPDATE messages SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
                 self.cursor.execute("UPDATE settings SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
         except Exception as e:

@@ -32,7 +32,7 @@ async def command_start(message: Message):
 
     # chat_member = await bot.get_chat_member(-1001531919077, 5751545336)
     # member = chat_member.status == 'member'
-    cursor.execute('''SELECT * FROM chats WHERE NOT deleted''')
+    cursor.execute('''SELECT id_chat, id_user, deleted FROM chats''')
     result = cursor.fetchall()
     count = 0
     all_count = len(result)
@@ -40,30 +40,37 @@ async def command_start(message: Message):
     for i in result:
         id_chat = i[0]
         id_user = i[1]
+        deleted = i[2]
         member = False
         count += 1
         print(count, all_count, id_chat, id_user)
-
         try:
             chat_member = await bot.get_chat_member(id_chat, id_user)
             member = not chat_member.status == 'left'
         except Exception as e:
             pass
 
-        if not member:
-            cursor.execute("UPDATE chats SET deleted = True WHERE id_chat = %s AND id_user = %s", (id_chat, id_user))
-            connect.commit()
+        if deleted:
+            if member:
+                cursor.execute("UPDATE chats SET deleted = False WHERE id_chat = %s AND id_user = %s", (id_chat, id_user))
+                connect.commit()
 
-            result = await base.save_user_disable_in_chat(id_chat, id_user)
-            if result is not None:
-                channel_id = result[0]
-                try:
-                    await bot.kick_chat_member(channel_id, id_user)
-                    await bot.unban_chat_member(channel_id, id_user)
-                except Exception as e:
-                    pass
+        else:
 
-        # if not await base.application_for_membership(id_user) is None:
+            if not member:
+                cursor.execute("UPDATE chats SET deleted = True WHERE id_chat = %s AND id_user = %s", (id_chat, id_user))
+                connect.commit()
+
+                result = await base.save_user_disable_in_chat(id_chat, id_user)
+                if result is not None:
+                    channel_id = result[0]
+                    try:
+                        await bot.kick_chat_member(channel_id, id_user)
+                        await bot.unban_chat_member(channel_id, id_user)
+                    except Exception as e:
+                        pass
+
+            # if not await base.application_for_membership(id_user) is None:
 
     await message_send(message.from_user.id, 'Done')
 
