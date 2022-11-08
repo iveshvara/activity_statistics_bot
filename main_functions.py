@@ -280,16 +280,18 @@ async def get_start_menu(id_user):
     user_groups = []
     channel_enabled = False
     for i in meaning:
-        get = False
-        try:
-            # chat_admins = await bot.get_chat_administrators(i[0])
-            # get = its_admin(i[0], chat_admins)
-            member = await bot.get_chat_member(i[0], id_user)
-            get = member.is_chat_admin()
-        except Exception as e:
-            pass
+        # get = False
+        # try:
+        #     # chat_admins = await bot.get_chat_administrators(i[0])
+        #     # get = its_admin(i[0], chat_admins)
+        #     member = await bot.get_chat_member(i[0], id_user)
+        #     get = member.is_chat_admin()
+        # except Exception as e:
+        #     pass
+        #
+        # if get:
 
-        if get:
+        if await base.its_admin(id_user):
             title_result = i[1]
             user_groups.append([i[0], title_result])
 
@@ -708,6 +710,8 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
                 (project_id, id_user, date, sending_text))
             connect.commit()
 
+        sending_text = shielding(sending_text)
+
         cursor.execute(
             '''SELECT DISTINCT 
                 users.id_user,  
@@ -744,12 +748,14 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
             if i_message_id > 0:
                 await message_delete_by_id(i_id_user, i_message_id)
 
-            await message_send(i_id_user, text, inline_kb)
+            await message_send(i_id_user, sending_text, inline_kb)
 
         cursor.execute(
             'UPDATE project_administrators SET status = NULL, text = NULL, message_id = 0 '
             'WHERE project_id = %s AND id_user = %s', (project_id, id_user))
         connect.commit()
+
+        await message_send(id_user, 'Выполнено')
 
     elif status == 'text':
         status_meaning, accepted, response_is_filled, user_info = \

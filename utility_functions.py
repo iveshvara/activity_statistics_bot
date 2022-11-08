@@ -63,7 +63,7 @@ async def message_send(id_user, text, incoming_inline_kb=None, disable_notificat
             await base.save_menu_message_id(new_message)
 
     except Exception as e:
-        await send_error('', str(e), traceback.format_exc())
+        await send_error(id_user, str(e), traceback.format_exc())
 
 
 async def message_delete(message: Message):

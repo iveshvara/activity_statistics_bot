@@ -26,6 +26,19 @@ async def command_start(message: Message):
         await message_delete(message)
 
 
+@dp.message_handler(commands=['execute_sql_code'])
+async def command_start(message: Message):
+    if message.from_user.id == SUPER_ADMIN_ID:
+        sql_code = message.text.replace('/execute_sql_code ', '')
+        try:
+            with connect:
+                cursor.execute(sql_code)
+        except Exception as e:
+            await message_send(message.from_user.id, str(e))
+
+        await message_send(message.from_user.id, 'Done')
+
+
 @dp.message_handler(commands=['updating_deleted'])
 async def command_start(message: Message):
     await message_send(message.from_user.id, 'Start')
