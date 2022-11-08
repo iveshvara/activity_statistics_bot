@@ -327,11 +327,15 @@ async def get_start_menu(id_user):
     elif homework_date is not None:
         inline_kb.add(AddInlBtn(text='Домашние работы', callback_data=f'homework {project_id} text {homework_date}'))
 
+    if await base.registration_done(id_user):
+        result = await base.application_for_membership(id_user)
+        inline_kb.add(AddInlBtn('Канал с лекциями', url=result[2]))
+
     if await base.its_admin_project(id_user, project_id):
-        inline_kb.add(AddInlBtn(text='[Рассылка по "' + project_name + '"]', callback_data=f'homework {project_id}'))
+        inline_kb.add(AddInlBtn(text='Рассылка по "' + project_name + '"', callback_data=f'homework {project_id}'))
 
     if id_user == SUPER_ADMIN_ID:
-        inline_kb.add(AddInlBtn(text='[super admin functions]', callback_data='super_admin '))
+        inline_kb.add(AddInlBtn(text='God mode', callback_data='super_admin '))
 
     return text, inline_kb
 

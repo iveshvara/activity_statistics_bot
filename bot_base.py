@@ -1,3 +1,4 @@
+
 from _settings import TOKEN, SKIP_ERROR_TEXT, THIS_IS_BOT_NAME, LOGS_CHANNEL_ID
 from service import get_today, get_name_tg, shielding
 from aiogram import Bot
