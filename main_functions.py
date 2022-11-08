@@ -739,16 +739,18 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
                     "INSERT INTO homework_check (project_id, date, id_user, status, selected) "
                     "VALUES (%s, %s, %s, 'Получено', False)", (project_id, date, i_id_user))
                 connect.commit()
-
                 inline_kb = await homework_kb(project_id, i_id_user, date)
-
             else:
-                i_text, inline_kb = await get_start_menu(i_id_user)
+                inline_kb = InlineKeyboardMarkup(row_width=1)
 
             if i_message_id > 0:
                 await message_delete_by_id(i_id_user, i_message_id)
 
             await message_send(i_id_user, sending_text, inline_kb)
+
+            if not its_homework:
+                i_text, i_inline_kb = await get_start_menu(i_id_user)
+                await message_send(i_id_user, i_text, i_inline_kb)
 
         cursor.execute(
             'UPDATE project_administrators SET status = NULL, text = NULL, message_id = 0 '
