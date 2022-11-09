@@ -191,7 +191,7 @@ async def get_stat(id_chat, id_user=None):
 
         its_homeworks = sort_by == 'homeworks'
         if its_homeworks:
-            text = f'*Выполнили все дз из {homeworks_all}:*'
+            text = f'*Выполнили все дз:*'
         else:
             text = f'*Активные участники: `Символов/Сообщений/ДЗ из {homeworks_all}`*'
         active_members_inscription_is_shown = False
