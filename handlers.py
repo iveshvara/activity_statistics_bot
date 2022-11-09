@@ -1,16 +1,18 @@
 
-from _settings import THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
-from bot_base import bot, dp, base, cursor, connect
-from main_functions import get_stat, get_start_menu, registration_process, registration_command, \
-    admin_homework_process, homework_process, homework_response, homework_kb, \
-    process_parameter_continuation, setting_up_a_chat
-from utility_functions import callback_edit_text, message_answer, message_delete, last_menu_message_delete, message_send
-from service import add_buttons_time_selection, its_admin, shielding
+import datetime
+
+import requests
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatJoinRequest
 from geopy.geocoders import Yandex
-import requests
-import datetime
+
+from _settings import THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
+from bot_base import bot, dp, base, cursor, connect
+from main_functions import get_stat, get_start_menu, registration_process, registration_command, \
+    admin_homework_process, homework_process, homework_response, homework_kb, process_parameter_continuation, \
+    setting_up_a_chat
+from service import add_buttons_time_selection, its_admin, shielding
+from utility_functions import callback_edit_text, message_answer, message_delete, last_menu_message_delete, message_send
 
 
 @dp.message_handler(commands=['start', 'menu'])
@@ -575,7 +577,7 @@ async def message_handler(message):
             await base.insert_or_update_chats_and_users(id_chat, message.from_user, characters, date_of_the_last_message)
 
 
-# dont use
+# region dont use
 
 @dp.message_handler(commands=['call_meeting'])
 async def command_call_meeting(message: Message):
@@ -745,3 +747,5 @@ async def join(message: Message):
 @dp.chat_member_handler()
 async def join(update):
     pass
+
+# endregion

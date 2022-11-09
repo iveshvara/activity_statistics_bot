@@ -7,8 +7,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 
 from _settings import SUPER_ADMIN_ID
 from bot_base import bot, cursor, connect, base, send_error
-from service import shielding, get_name_tg, get_today, message_requirements, \
-    convert_bool, convert_bool_binary
+from service import shielding, get_name_tg, get_today, message_requirements, convert_bool, convert_bool_binary
 from utility_functions import message_delete_by_id, callback_edit_text, message_send
 
 

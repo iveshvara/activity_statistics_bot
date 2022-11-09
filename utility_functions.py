@@ -1,7 +1,9 @@
 
-from bot_base import bot, base, send_error
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup
 import traceback
+
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup
+
+from bot_base import bot, base, send_error
 
 
 async def callback_edit_text(callback: CallbackQuery, text, inline_kb):

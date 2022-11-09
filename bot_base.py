@@ -1,13 +1,15 @@
 
-from _settings import TOKEN, SKIP_ERROR_TEXT, THIS_IS_BOT_NAME, LOGS_CHANNEL_ID
-from service import get_today, get_name_tg, shielding
-from aiogram import Bot
-from aiogram.dispatcher import Dispatcher
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.types import Message, User
 # from aiogram.contrib.middlewares.logging import LoggingMiddleware
 import traceback
+
 import psycopg2
+from aiogram import Bot
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import Dispatcher
+from aiogram.types import Message, User
+
+from _settings import TOKEN, SKIP_ERROR_TEXT, THIS_IS_BOT_NAME, LOGS_CHANNEL_ID
+from service import get_today, get_name_tg, shielding
 
 bot = Bot(TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
