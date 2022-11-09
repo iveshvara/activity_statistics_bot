@@ -400,7 +400,7 @@ class Database:
 
     async def get_date_status_meaning_homework(self, status, project_id, homework_date, id_user=None):
         try:
-            status_meaning = ''
+            status_meaning = 'Нет домашних работ'
             accepted = False
             status_is_filled = False
             user_info = ''

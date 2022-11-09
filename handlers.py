@@ -27,7 +27,7 @@ async def command_start(message: Message):
 
 
 @dp.message_handler(commands=['execute_sql_code'])
-async def command_start(message: Message):
+async def command_execute_sql_code(message: Message):
     if message.from_user.id == SUPER_ADMIN_ID:
         sql_code = message.text.replace('/execute_sql_code ', '')
         if len(sql_code) > 10:
@@ -41,7 +41,7 @@ async def command_start(message: Message):
 
 
 @dp.message_handler(commands=['updating_deleted'])
-async def command_start(message: Message):
+async def command_updating_deleted(message: Message):
     await message_send(message.from_user.id, 'Start')
 
     # chat_member = await bot.get_chat_member(-1001531919077, 5751545336)
@@ -90,7 +90,7 @@ async def command_start(message: Message):
 
 
 @dp.message_handler(commands=['test'])
-async def command_start(message: Message):
+async def command_test(message: Message):
     await message_send(message.from_user.id, 'Start')
     # Перенести пользователей из chats в users
     # cursor.execute('''SELECT DISTINCT chats.id_user, chats.first_name, chats.last_name, chats.username FROM chats

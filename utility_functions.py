@@ -40,7 +40,8 @@ async def message_answer(message: Message, text, incoming_inline_kb=None):
             await base.save_menu_message_id(new_message)
 
     except Exception as e:
-        await send_error('', str(e), traceback.format_exc())
+        await send_error(text, str(e), traceback.format_exc())
+        await send_error(inline_kb, str(e), traceback.format_exc())
 
 
 async def message_send(id_user, text, incoming_inline_kb=None, disable_notification=False):

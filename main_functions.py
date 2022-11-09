@@ -1,13 +1,15 @@
 
-from bot_base import bot, cursor, connect, base, send_error
-from _settings import SUPER_ADMIN_ID
-from service import its_admin, shielding, get_name_tg, reduce_large_numbers, get_today, message_requirements, \
-    convert_bool, convert_bool_binary
-from utility_functions import message_delete_by_id, callback_edit_text, message_send
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton as AddInlBtn
 # from aiogram.contrib.middlewares.logging import LoggingMiddleware
 import datetime
 import traceback
+
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton as AddInlBtn
+
+from _settings import SUPER_ADMIN_ID
+from bot_base import bot, cursor, connect, base, send_error
+from service import shielding, get_name_tg, get_today, message_requirements, \
+    convert_bool, convert_bool_binary
+from utility_functions import message_delete_by_id, callback_edit_text, message_send
 
 
 async def run_reminder():
@@ -956,33 +958,33 @@ async def registration_process(message: Message, meaning='', its_callback=False)
     #             else:
     #                 projects += meaning + ';'
     #             meaning = projects
-    # 
+    #
     #             inline_kb = await get_projects_cb(projects, 'projects')
     #             text = message.text
     #             text = shielding(text)
-    # 
+    #
     #             await message.edit_text(text, reply_markup=inline_kb, parse_mode='MarkdownV2')
-    # 
+    #
     #         else:
     #             new_registration_field = 'done'
     #             registration_field = ''
-    # 
+    #
     #         # elif registration_field == 'done':
     #             # inviteToChannel
-    # 
+    #
     #             # 1
     #             invite_link = INVITE_LINK
-    # 
+    #
     #             # 2
     #             # cursor.execute(f'SELECT first_name, last_name, username FROM users WHERE id_user = {id_user}')
     #             # user = cursor.fetchone()
     #             # name = f'{user[0]}, {user[1]}, {user[2]}, {id_user}'
     #             # result = await bot.create_chat_invite_link(chat_id=CHANNEL_ID, name=name, member_limit=1)
     #             # invite_link = result.invite_link
-    # 
+    #
     #             inline_kb = InlineKeyboardMarkup(row_width=1)
     #             inline_kb.add(AddInlBtn('Заявка на вступление', url=invite_link`))
-    # 
+    #
     #             text = 'Шаг 8 из 7. \nУчебные материалы будут выкладываться в канал. Подайте заявку на вступление (будет принята автоматически).'
     #     else:
     #         try:
