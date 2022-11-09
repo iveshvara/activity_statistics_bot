@@ -215,6 +215,15 @@ async def process_parameter(callback: CallbackQuery):
         parameter_value_int += adding
         await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value_int)
 
+    elif parameter_name == 'sort_by':
+        if parameter_value == 'characters':
+            new_parameter_value = 'messages'
+        elif parameter_value == 'messages':
+            new_parameter_value = 'homeworks'
+        else:
+            new_parameter_value = 'characters'
+        await process_parameter_continuation(callback, id_chat, id_user, parameter_name, new_parameter_value)
+
     elif parameter_name == 'project_name':
         text = shielding('Выберете ваш проект:')
         projects_tuple = await base.get_all_projects()

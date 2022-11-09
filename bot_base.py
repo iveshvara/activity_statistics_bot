@@ -88,10 +88,10 @@ class Database:
             with self.connect:
                 self.cursor.execute(
                     """INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
-                    sort_by_messages, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
+                    sort_by, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
                     period_of_activity, report_enabled, project_id, curators_group, enable_group, last_notify_date, 
                     last_notify_message_id_date, do_not_output_name_from_registration, check_channel_subscription) 
-                    VALUES (%s, %s, False, False, False, False, False, 7, False, 0, False, True, 
+                    VALUES (%s, %s, False, False, 'characters', False, False, 7, False, 0, False, True, 
                     %s, %s, False, False)""", (id_chat, title, today, today))
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
@@ -250,7 +250,7 @@ class Database:
 
     async def its_admin(self, id_user):
         try:
-            self.cursor.execute("SELECT role = 'admin' FROM users WHERE id_user = %s", (id_user,))
+            self.cursor.execute("SELECT NOT role = 'user' FROM users WHERE id_user = %s", (id_user,))
             result = self.cursor.fetchone()
             if result is None:
                 return False

@@ -139,10 +139,13 @@ def reduce_large_numbers(number):
     # if number <= 10000:
     #     text_result = str(number)
     # else:
-    short_number = round(number/1000, 1)
-    short_number_integer = str(round(short_number // 1))
-    short_number_fractional = str(round(short_number % 1))
-    text_result = short_number_integer + '\.' + short_number_fractional + 'K'
+    if number == 0:
+        text_result = '0'
+    else:
+        short_number = round(number/1000, 1)
+        short_number_integer = str(round(short_number // 1))
+        short_number_fractional = str(round(short_number % 1))
+        text_result = short_number_integer + '\.' + short_number_fractional + 'K'
 
     return text_result
 

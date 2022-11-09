@@ -89,63 +89,63 @@ async def run_reminder():
 
 
 async def get_stat(id_chat, id_user=None):
-    statistics_for_everyone = False
-    include_admins_in_statistics = False
-    try:
-        chat_admins = await bot.get_chat_administrators(id_chat)
-    except Exception as e:
-        chat_admins = ()
-    period_of_activity = 0
-    sort_by_messages = False
-    do_not_output_the_number_of_messages = False
-    do_not_output_the_number_of_characters = False
-    check_channel_subscription = False
-    channel_id = 0
-    do_not_output_name_from_registration = False
-
     cursor.execute(
         '''SELECT 
             settings.statistics_for_everyone, 
             settings.include_admins_in_statistics, 
             settings.period_of_activity, 
-            settings.sort_by_messages, 
-            settings.do_not_output_the_number_of_messages, 
-            settings.do_not_output_the_number_of_characters, 
+            settings.sort_by, 
+            -- settings.do_not_output_the_number_of_messages, 
+            -- settings.do_not_output_the_number_of_characters, 
             settings.check_channel_subscription, 
             coalesce(projects.channel_id, 0),
-            settings.do_not_output_name_from_registration
+            settings.do_not_output_name_from_registration,
+            settings.project_id,
+            COUNT(DISTINCT homework_text.date) AS homework_text
         FROM settings 
         LEFT OUTER JOIN projects 
                 ON settings.project_id = projects.project_id
-        WHERE id_chat = %s''', (id_chat,))
+        LEFT OUTER JOIN homework_text 
+                ON settings.project_id = homework_text.project_id
+        WHERE id_chat = %s
+        GROUP BY
+            settings.statistics_for_everyone, 
+            settings.include_admins_in_statistics, 
+            settings.period_of_activity, 
+            settings.sort_by,  
+            settings.check_channel_subscription, 
+            coalesce(projects.channel_id, 0),
+            settings.do_not_output_name_from_registration,
+            settings.project_id''', (id_chat,))
     meaning = cursor.fetchone()
-    if meaning is not None:
-        statistics_for_everyone = meaning[0]
-        include_admins_in_statistics = meaning[1]
-        period_of_activity = meaning[2]
-        sort_by_messages = meaning[3]
-        do_not_output_the_number_of_messages = meaning[4]
-        do_not_output_the_number_of_characters = meaning[5]
-        check_channel_subscription = meaning[6]
-        channel_id = meaning[7]
-        do_not_output_name_from_registration = meaning[8]
+    if meaning is None:
+        await send_error(f'Не найден {id_chat}. Как такое может быть?', '', str(traceback.format_exc()))
 
-    if statistics_for_everyone or its_admin(id_user, chat_admins) or id_user is None:
-        if sort_by_messages:
-            sort = 'messages'
+    statistics_for_everyone = meaning[0]
+    include_admins_in_statistics = meaning[1]
+    period_of_activity = meaning[2]
+    sort_by = meaning[3]
+    check_channel_subscription = meaning[4]
+    channel_id = meaning[5]
+    do_not_output_name_from_registration = meaning[6]
+    project_id = meaning[7]
+    homework_text = meaning[8]
+
+    if statistics_for_everyone or id_user is None or await base.its_admin(id_user):
+        if sort_by == 'homeworks':
+            sort = 'homeworks DESC'
         else:
-            sort = 'characters'
-
+            sort = f'inactive_days ASC, {sort_by} DESC'
         today = get_today()
         count_messages = 0
         cursor.execute(
             f'''SELECT 
                 users.id_user, 
                 users.first_name, 
-                coalesce(users.last_name, ''), 
-                coalesce(users.username, ''), 
-                coalesce(users.fio, ''),
-                SUM(coalesce(messages.characters, 0)) AS characters, 
+                COALESCE(users.last_name, ''), 
+                COALESCE(users.username, ''), 
+                COALESCE(users.fio, ''),
+                SUM(COALESCE(messages.characters, 0)) AS characters, 
                 COUNT(messages.characters) AS messages, 
                 chats.deleted, 
                 chats.date_of_the_last_message, 
@@ -154,12 +154,20 @@ async def get_stat(id_chat, id_user=None):
                         AND {period_of_activity} > DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
                         THEN 0 
                     ELSE DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
-                END AS inactive_days
+                END AS inactive_days,
+                NOT role = 'user' AS admin, 
+                COUNT(DISTINCT CASE 
+                    WHEN homework_check.status = 'Принято' 
+                        THEN homework_check.date  
+                END) AS homeworks
             FROM chats 
             LEFT JOIN messages 
                 ON chats.id_chat = messages.id_chat 
                     AND chats.id_user = messages.id_user 
                     AND {period_of_activity} > DATE_PART('day', '{today}' - messages.date)
+            LEFT JOIN homework_check
+                ON chats.id_user = homework_check.id_user
+                    AND homework_check.project_id = {project_id}
             INNER JOIN users 
                 ON chats.id_user = users.id_user  
             WHERE 
@@ -168,24 +176,24 @@ async def get_stat(id_chat, id_user=None):
             GROUP BY 
                 users.id_user, 
                 users.first_name, 
-                coalesce(users.last_name, ''), 
-                coalesce(users.username, ''), 
-                coalesce(users.fio, ''),
+                COALESCE(users.last_name, ''), 
+                COALESCE(users.username, ''), 
+                COALESCE(users.fio, ''),
                 chats.deleted, 
                 chats.date_of_the_last_message, 
-                inactive_days
-            ORDER BY deleted ASC, inactive_days ASC, {sort} DESC '''
-        )
+                inactive_days,
+                NOT role = 'user'
+            ORDER BY 
+                deleted ASC,  
+                {sort},
+                users.first_name''')
         meaning = cursor.fetchall()
-        # row_count = len(meaning)
-        # row_count = int(len(str(row_count)))
-        #
-        # text = '`' + align_by_number_of_characters('N', row_count) + ' |  ✉ |    🖋️`'
-        text = '*N\. Пользователь: `Сообщений/Символов`*\n'
 
-        # requests = None
+        text = f'*Активные участники: `Символов/Сообщений/ДЗ из {homework_text}`*'
         active_members_inscription_is_shown = False
         deleted_members_inscription_is_shown = False
+        its_homeworks = sort_by == 'homeworks'
+
         for i in meaning:
             i_id_user = i[0]
             i_first_name = i[1]
@@ -195,22 +203,28 @@ async def get_stat(id_chat, id_user=None):
                 i_fio = ''
             else:
                 i_fio = i[4]
-            i_characters = reduce_large_numbers(i[5])
+            # i_characters = reduce_large_numbers(i[5])
+            i_characters = i[5]
             i_messages = i[6]
             i_deleted = i[7]
             i_date_of_the_last_message = i[8]
-            i_inactive_days = i[9]
-            # if requests is None:
-            #     requests = i[10]
-            # i_response = i[11]
+            i_inactive_days = int(i[9])
+            i_admin = i[10]
+            i_homeworks = i[11]
 
             if not include_admins_in_statistics:
-                if its_admin(i_id_user, chat_admins):
+                if i_admin:
                     continue
 
-            if i_inactive_days > 0 and not i_deleted and not active_members_inscription_is_shown:
-                active_members_inscription_is_shown = True
-                text += f'\n\n*Неактивные участники* \(больше {period_of_activity} дней\):'
+            if its_homeworks:
+                if i_homeworks == 0 and not i_deleted and not active_members_inscription_is_shown:
+                    active_members_inscription_is_shown = True
+                    text += f'\n\n*Не выполнили ни одно дз:*'
+
+            else:
+                if i_inactive_days > 0 and not i_deleted and not active_members_inscription_is_shown:
+                    active_members_inscription_is_shown = True
+                    text += f'\n\n*Неактивные участники:* `неактивен дней/ДЗ из {homework_text}`'
 
             if i_deleted and not deleted_members_inscription_is_shown:
                 deleted_members_inscription_is_shown = True
@@ -220,11 +234,6 @@ async def get_stat(id_chat, id_user=None):
             count_messages += 1
 
             channel_subscription = ''
-            specifics = ''
-            characters = ''
-            messages = ''
-            response = ''
-
             if check_channel_subscription and not channel_id == 0 and not i_deleted:
                 member_status = False
 
@@ -237,29 +246,24 @@ async def get_stat(id_chat, id_user=None):
                 if member_status:
                     channel_subscription = ''
                 else:
-                    channel_subscription = '⚠️ '  # 'Не подписан на канал\. \n     — '
+                    channel_subscription = '⚠️ '
 
-            if not do_not_output_the_number_of_characters:
-                characters = str(i_characters)  # символов 💬 🖌
-
-            if not do_not_output_the_number_of_messages:
-                messages = str(i_messages)  # сообщений 📃
-
-            # if requests > 0:
-            #     response = f'откликов: {i_response} из {requests}'
-
-            inactive = ''
             if i_deleted:
-                data_str = shielding(i_date_of_the_last_message.strftime("%d.%m.%Y"))  # "%d.%m.%Y %H:%M:%S"
-                inactive = f' \(вне чата с {data_str}, дней назад: {int(i_inactive_days)}\)'
-            elif i_inactive_days > 0:
-                inactive = f' \(неактивен дней: {int(i_inactive_days)}\)'
+                data_str = shielding(i_date_of_the_last_message.strftime("%d.%m.%Y"))
+                specifics = f' \(вне чата с {data_str}, дней назад: {i_inactive_days}\)'
             else:
-                specifics += ': `' + messages + '/' + characters + '`'
+
+                if not sort_by == 'homeworks' and i_inactive_days > 0:
+                    specifics = f'{i_inactive_days}'
+                else:
+                    specifics = str(i_characters) + '/' + str(i_messages)
+
+                specifics += '/' + str(i_homeworks)
+                specifics = ': `' + specifics + '`'
 
             user = await get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_fio)
             count_messages_text = str(count_messages)
-            text += f'\n{count_messages_text}\. {channel_subscription}{user}{specifics}{inactive}'
+            text += f'\n{count_messages_text}\. {channel_subscription}{user}{specifics}'
 
         if text == '*Активные участники:*\n':
             text = 'Нет статистики для отображения\.'
@@ -1028,9 +1032,7 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
         '''SELECT 
             settings.statistics_for_everyone,
             settings.include_admins_in_statistics,
-            settings.sort_by_messages,
-            settings.do_not_output_the_number_of_messages,
-            settings.do_not_output_the_number_of_characters,
+            settings.sort_by,
             settings.period_of_activity,
             settings.report_enabled,
             coalesce(projects.name, ''),
@@ -1049,62 +1051,68 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
     if meaning is None:
         return '', ''
 
+    statistics_for_everyone = meaning[0]
+    include_admins_in_statistics = meaning[1]
+    sort_by = meaning[2]
+    period_of_activity = meaning[3]
+    report_enabled = meaning[4]
+    projects_name = meaning[5]
+    do_not_output_name_from_registration = meaning[6]
+    check_channel_subscription = meaning[7]
+    title = meaning[8]
+
     inline_kb = InlineKeyboardMarkup(row_width=1)
-    if meaning[0]:
+    if statistics_for_everyone:
         text='Статистика доступна всем'
     else:
         text='Статистика доступна только администраторам'
     inline_kb.add(AddInlBtn(
         text=text,
-        callback_data=f'settings {id_chat} statistics_for_everyone {convert_bool_binary(meaning[0])}'))
+        callback_data=f'settings {id_chat} statistics_for_everyone {convert_bool_binary(statistics_for_everyone)}'))
 
     inline_kb.add(AddInlBtn(
-        text='Включать админов в статистику: ' + convert_bool(meaning[1]),
-        callback_data=f'settings {id_chat} include_admins_in_statistics {convert_bool_binary(meaning[1])}'))
+        text='Включать админов в статистику: ' + convert_bool(include_admins_in_statistics),
+        callback_data=
+        f'settings {id_chat} include_admins_in_statistics {convert_bool_binary(include_admins_in_statistics)}'))
 
-    if meaning[2]:
-        text='Сортировка по сообщениям'
-    else:
+    if sort_by == 'characters':
         text = 'Сортировка по количеству символов'
+    elif sort_by == 'messages':
+        text = 'Сортировка по сообщениям'
+    else:
+        text = 'Сортировка по домашним заданиям'
     inline_kb.add(AddInlBtn(
         text=text,
-        callback_data=f'settings {id_chat} sort_by_messages {convert_bool_binary(meaning[2])}'))
+        callback_data=f'settings {id_chat} sort_by {sort_by}'))
 
     inline_kb.add(AddInlBtn(
-        text='Не выводить количество сообщений: ' + convert_bool(meaning[3]),
-        callback_data=f'settings {id_chat} do_not_output_the_number_of_messages {convert_bool_binary(meaning[3])}'))
+        text='Статистика за период (дней): ' + str(period_of_activity),
+        callback_data=f'settings {id_chat} period_of_activity {period_of_activity}'))
 
     inline_kb.add(AddInlBtn(
-        text='Не выводить количество символов: ' + convert_bool(meaning[4]),
-        callback_data=f'settings {id_chat} do_not_output_the_number_of_characters {convert_bool_binary(meaning[4])}'))
+        text='Автоматический отчет в чат: ' + convert_bool(report_enabled),
+        callback_data=f'settings {id_chat} report_enabled {convert_bool_binary(report_enabled)}'))
 
     inline_kb.add(AddInlBtn(
-        text='Статистика за период (дней): ' + str(meaning[5]),
-        callback_data=f'settings {id_chat} period_of_activity {meaning[5]}'))
-
-    inline_kb.add(AddInlBtn(
-        text='Автоматический отчет в чат: ' + convert_bool(meaning[6]),
-        callback_data=f'settings {id_chat} report_enabled {convert_bool_binary(meaning[6])}'))
-
-    inline_kb.add(AddInlBtn(
-        text='Проект: ' + meaning[7],
+        text='Проект: ' + projects_name,
         callback_data=f'settings {id_chat} project_name'))
 
-    if meaning[8]:
+    if do_not_output_name_from_registration:
         text='Имя и фамилия пользователя'
     else:
         text = 'Имя и фамилия из регистрации'
     inline_kb.add(AddInlBtn(
         text=text,
-        callback_data=f'settings {id_chat} do_not_output_name_from_registration {convert_bool_binary(meaning[8])}'))
+        callback_data=f'settings {id_chat} do_not_output_name_from_registration '
+                      f'{convert_bool_binary(do_not_output_name_from_registration)}'))
 
-    check_channel_subscription = meaning[9]
-    check_channel_subscription_on = ''
+    subscription_off = ''
     if check_channel_subscription:
-        check_channel_subscription_on = ' ⚠️'
+        subscription_off = ' ⚠️'
     inline_kb.add(AddInlBtn(
-        text='Проверять подписку на канал️: ' + convert_bool(meaning[9]) + check_channel_subscription_on,
-        callback_data=f'settings {id_chat} check_channel_subscription {convert_bool_binary(meaning[9])}'))
+        text='Проверять подписку на канал : ' + convert_bool(check_channel_subscription) + subscription_off,
+        callback_data=
+        f'settings {id_chat} check_channel_subscription {convert_bool_binary(check_channel_subscription)}'))
 
     if back_button:
         inline_kb.add(AddInlBtn(text='Назад', callback_data='back'))
@@ -1113,6 +1121,6 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
         inline_kb.add(AddInlBtn(text='Назад', callback_data='super_admin '))
 
     text = await get_stat(id_chat, id_user)
+    group_name = shielding(title)
 
-    group_name = shielding(meaning[10])
     return '*Группа "' + group_name + '"\.*\n\n' + text, inline_kb
