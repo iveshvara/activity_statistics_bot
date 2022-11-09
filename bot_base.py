@@ -449,9 +449,10 @@ class Database:
 
             if id_user is not None:
                 first_name, last_name, username, fio, title = await base.get_user_info(id_user)
-                user_info = shielding(title.replace('\\', '')) + '\n'
-                user_info += await get_name_tg(id_user, first_name, last_name, username, fio)
-                user_info += '\n\n'
+                if first_name is not None:
+                    user_info = shielding(title.replace('\\', '')) + '\n'
+                    user_info += await get_name_tg(id_user, first_name, last_name, username, fio)
+                    user_info += '\n\n'
 
             return status_meaning, accepted, status_is_filled, user_info
 
@@ -595,6 +596,12 @@ class Database:
 
     async def get_user_info(self, id_user):
         try:
+            first_name = None
+            last_name = None
+            username = None
+            fio = None
+            title = None
+
             self.cursor.execute(
                 """SELECT 
                     users.first_name, 
@@ -611,12 +618,12 @@ class Database:
                     AND settings.enable_group 
                     AND NOT settings.curators_group""", (id_user,))
             result = self.cursor.fetchone()
-
-            first_name = result[0]
-            last_name = result[1]
-            username = result[2]
-            fio = result[3]
-            title = result[4]
+            if result is not None:
+                first_name = result[0]
+                last_name = result[1]
+                username = result[2]
+                fio = result[3]
+                title = result[4]
 
             return first_name, last_name, username, fio, title
 

@@ -122,6 +122,16 @@ async def command_start(message: Message):
     #         cursor.execute("UPDATE users SET role = 'admin' WHERE id_user = %s", (id_user,))
     #         connect.commit()
 
+    # Заполнить пустые роли
+    # cursor.execute('''SELECT id_user, role FROM users ''')
+    # meaning = cursor.fetchall()
+    # for i in meaning:
+    #     if i[1] is None:
+    #         id_user = i[0]
+    #         cursor.execute("UPDATE users SET role = 'user' WHERE id_user = %s", (id_user,))
+    #         connect.commit()
+    #         print(id_user)
+
     # Очистить домашки
     # cursor.execute('''DELETE FROM homework_check; DELETE FROM homework_text;''')
     # connect.commit()

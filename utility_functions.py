@@ -18,7 +18,7 @@ async def message_edit_text(message: Message, text, inline_kb):
             reply_markup=inline_kb,
             disable_web_page_preview=True)
     except Exception as e:
-        await send_error(str(message.from_user), str(e), traceback.format_exc())
+        await send_error(str(message.chat), str(e), traceback.format_exc())
 
 
 async def message_answer(message: Message, text, incoming_inline_kb=None):
