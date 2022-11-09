@@ -129,7 +129,7 @@ async def get_stat(id_chat, id_user=None):
     channel_id = meaning[5]
     do_not_output_name_from_registration = meaning[6]
     project_id = meaning[7]
-    homework_text = meaning[8]
+    homeworks_all = meaning[8]
 
     if statistics_for_everyone or id_user is None or await base.its_admin(id_user):
         if sort_by == 'homeworks':
@@ -189,10 +189,13 @@ async def get_stat(id_chat, id_user=None):
                 users.first_name''')
         meaning = cursor.fetchall()
 
-        text = f'*Активные участники: `Символов/Сообщений/ДЗ из {homework_text}`*'
+        its_homeworks = sort_by == 'homeworks'
+        if its_homeworks:
+            text = f'*Выполнили все дз из {homeworks_all}:*'
+        else:
+            text = f'*Активные участники: `Символов/Сообщений/ДЗ из {homeworks_all}`*'
         active_members_inscription_is_shown = False
         deleted_members_inscription_is_shown = False
-        its_homeworks = sort_by == 'homeworks'
 
         for i in meaning:
             i_id_user = i[0]
@@ -217,19 +220,27 @@ async def get_stat(id_chat, id_user=None):
                     continue
 
             if its_homeworks:
-                if i_homeworks == 0 and not i_deleted and not active_members_inscription_is_shown:
+                if i_homeworks < homeworks_all and not i_deleted and not active_members_inscription_is_shown:
                     active_members_inscription_is_shown = True
+                    text += f'\n\n*Выполнили не все дз:*'
+
+                if i_homeworks == 0 and not deleted_members_inscription_is_shown:
+                    deleted_members_inscription_is_shown = True
                     text += f'\n\n*Не выполнили ни одно дз:*'
+                    count_messages = 0
+
+                if i_deleted:
+                    continue
 
             else:
                 if i_inactive_days > 0 and not i_deleted and not active_members_inscription_is_shown:
                     active_members_inscription_is_shown = True
-                    text += f'\n\n*Неактивные участники:* `неактивен дней/ДЗ из {homework_text}`'
+                    text += f'\n\n*Неактивные участники:* `неактивен дней/ДЗ из {homeworks_all}`'
 
-            if i_deleted and not deleted_members_inscription_is_shown:
-                deleted_members_inscription_is_shown = True
-                text += f'\n\n*Вышедшие участники:*'
-                count_messages = 0
+                if i_deleted and not deleted_members_inscription_is_shown:
+                    deleted_members_inscription_is_shown = True
+                    text += f'\n\n*Вышедшие участники:*'
+                    count_messages = 0
 
             count_messages += 1
 
@@ -248,17 +259,18 @@ async def get_stat(id_chat, id_user=None):
                 else:
                     channel_subscription = '⚠️ '
 
+            specifics = ''
             if i_deleted:
                 data_str = shielding(i_date_of_the_last_message.strftime("%d.%m.%Y"))
                 specifics = f' \(вне чата с {data_str}, дней назад: {i_inactive_days}\)'
             else:
+                if not its_homeworks:
+                    if not sort_by == 'homeworks' and i_inactive_days > 0:
+                        specifics = f'{i_inactive_days}/'
+                    else:
+                        specifics = str(i_characters) + '/' + str(i_messages) + '/'
 
-                if not sort_by == 'homeworks' and i_inactive_days > 0:
-                    specifics = f'{i_inactive_days}'
-                else:
-                    specifics = str(i_characters) + '/' + str(i_messages)
-
-                specifics += '/' + str(i_homeworks)
+                specifics += str(i_homeworks)
                 specifics = ': `' + specifics + '`'
 
             user = await get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_fio)
