@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from _settings import SUPER_ADMIN_ID
 from bot_base import bot, cursor, connect, base, send_error
 from service import shielding, get_name_tg, get_today, message_requirements, convert_bool, convert_bool_binary
-from utility_functions import message_delete_by_id, callback_edit_text, message_send
+from utility_functions import message_delete_by_id, callback_edit_text, message_send, message_progress_bar
 
 
 async def run_reminder():
@@ -746,6 +746,14 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
             (project_id,)
         )
         meaning = cursor.fetchall()
+
+        # message_progress_bar
+        all_count = len(meaning)
+        count = 0
+        message_pb = None
+        time_point = None
+        #
+
         for i in meaning:
             i_id_user = i[0]
             i_message_id = i[1]
@@ -765,6 +773,11 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
 
             await message_send(i_id_user, sending_text, inline_kb)
 
+            # message_progress_bar
+            count += 1
+            message_pb, time_point = await message_progress_bar(id_user, all_count, count, time_point, message_pb)
+            #
+
             if not its_homework:
                 i_text, i_inline_kb = await get_start_menu(i_id_user)
                 await message_send(i_id_user, i_text, i_inline_kb)
@@ -773,6 +786,10 @@ async def homework_process(project_id, id_user, status, homework_date, message_t
             'UPDATE project_administrators SET status = NULL, text = NULL, message_id = 0 '
             'WHERE project_id = %s AND id_user = %s', (project_id, id_user))
         connect.commit()
+
+        # message_progress_bar
+        await message_pb.delete()
+        #
 
         await message_send(id_user, 'Выполнено')
 

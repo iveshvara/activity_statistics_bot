@@ -12,7 +12,8 @@ from main_functions import get_stat, get_start_menu, registration_process, regis
     admin_homework_process, homework_process, homework_response, homework_kb, process_parameter_continuation, \
     setting_up_a_chat
 from service import add_buttons_time_selection, its_admin, shielding
-from utility_functions import callback_edit_text, message_answer, message_delete, last_menu_message_delete, message_send
+from utility_functions import callback_edit_text, message_answer, message_delete, last_menu_message_delete, \
+    message_send, callback_answer, message_progress_bar
 
 
 @dp.message_handler(commands=['start', 'menu'])
@@ -173,6 +174,15 @@ async def command_test(message: Message):
     #         connect.commit()
     #         print(id_user, q, result.index(i))
 
+    message_pb = None
+    time_point = None
+    all_count = 100000
+
+    for i in range(all_count):
+        message_pb, time_point = await message_progress_bar(message.from_user.id, all_count, i, time_point, message_pb)
+
+    await message_pb.delete()
+
     await message_send(message.from_user.id, 'Done')
 
 
@@ -200,7 +210,7 @@ async def choosing_a_chat_to_set_up(callback: CallbackQuery):
     text, inline_kb = await setting_up_a_chat(id_chat, id_user)
     await callback_edit_text(callback, text, inline_kb)
 
-    await callback.answer()
+    await callback_answer(callback)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('settings '))
@@ -263,7 +273,7 @@ async def process_parameter(callback: CallbackQuery):
 
         await process_parameter_continuation(callback, id_chat, id_user, parameter_name, parameter_value)
 
-    await callback.answer()
+    await callback_answer(callback)
 
 
 @dp.callback_query_handler(text='back')
@@ -272,14 +282,14 @@ async def menu_back(callback: CallbackQuery):
     text, inline_kb = await get_start_menu(id_user)
     await callback_edit_text(callback, text, inline_kb)
 
-    await callback.answer()
+    await callback_answer(callback)
 
 
 @dp.callback_query_handler(text='reg')
 async def reg_command_callback(callback: CallbackQuery):
     await registration_command(callback)
 
-    await callback.answer()
+    await callback_answer(callback)
 
 
 @dp.message_handler(commands=['reg'])
@@ -289,7 +299,7 @@ async def reg_command_message(message: Message):
 
 @dp.callback_query_handler(text='-')
 async def skip_action(callback: CallbackQuery):
-    await callback.answer()
+    await callback_answer(callback)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('gender ') or x.data.startswith('projects '))
@@ -300,7 +310,7 @@ async def gender_processing(callback: CallbackQuery):
 
     await registration_process(callback.message, value, True)
 
-    await callback.answer()
+    await callback_answer(callback)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('super_admin '))
@@ -343,7 +353,7 @@ async def super_admin_functions(callback: CallbackQuery):
         text, inline_kb = await setting_up_a_chat(id_chat, id_user, False, True)
         await callback_edit_text(callback, text, inline_kb)
 
-    await callback.answer()
+    await callback_answer(callback)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('homework '))
@@ -361,6 +371,9 @@ async def homework_functions(callback: CallbackQuery):
         homework_date = datetime.datetime.strptime(list_str[3], "%Y-%m-%d").date()
     message_id = callback.message.message_id
 
+    if status in ('homework', 'sending'):
+        await callback.message.delete()
+
     text, inline_kb, status = await homework_process(project_id, id_user, status, homework_date, message_id)
 
     if status == 'back':
@@ -370,7 +383,7 @@ async def homework_functions(callback: CallbackQuery):
     else:
         await callback_edit_text(callback, text, inline_kb)
 
-    await callback.answer()
+    await callback_answer(callback)
 
 
 @dp.callback_query_handler(lambda x: x.data and x.data.startswith('admin_homework '))
@@ -402,7 +415,7 @@ async def admin_homework_functions(callback: CallbackQuery):
     else:
         await callback_edit_text(callback, text, inline_kb)
 
-    await callback.answer()
+    await callback_answer(callback)
 
 
 @dp.chat_join_request_handler()
@@ -656,7 +669,7 @@ async def call_meeting_process(callback: CallbackQuery):
                    (id_user, '_' + str(time), new_value_time, id_chat, day))
     connect.commit()
 
-    await callback.answer()
+    await callback_answer(callback)
 
 
 @dp.message_handler(content_types=['contact'])

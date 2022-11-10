@@ -23,6 +23,9 @@ async def send_error(text: str, error_text: str, traceback_text: str):
     if error_text.find(SKIP_ERROR_TEXT) > -1:
         return
 
+    if not isinstance(text, str):
+        text = str(text)
+
     text_message = f'@{THIS_IS_BOT_NAME} error'
     if text is not None and len(text) > 0:
         text_message += f'\n\nQuery text:\n{text}'
