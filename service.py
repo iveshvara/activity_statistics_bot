@@ -42,7 +42,7 @@ def convert_bool_binary(value):
 def shielding(text):
     text_result = ''
     # allowed_simbols = ' ,:;—'
-    forbidden_characters = '_*[]()~">#+-=|{}.!' # '.-_[]()"'
+    forbidden_characters = '_*[]()~"<>#+-=|{}.!'
     for i in text:
         # if i.isalnum() or i in allowed_simbols:
         #     text_result += i

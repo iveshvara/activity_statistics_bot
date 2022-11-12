@@ -92,12 +92,29 @@ class Database:
             today = get_today()
             with self.connect:
                 self.cursor.execute(
-                    """INSERT INTO settings (id_chat, title, statistics_for_everyone, include_admins_in_statistics, 
-                    sort_by, do_not_output_the_number_of_messages, do_not_output_the_number_of_characters, 
-                    period_of_activity, report_enabled, project_id, curators_group, enable_group, last_notify_date, 
-                    last_notify_message_id_date, do_not_output_name_from_registration, check_channel_subscription) 
+                    """INSERT INTO settings (
+                        id_chat, 
+                        title, 
+                        statistics_for_everyone, 
+                        include_admins_in_statistics, 
+                        sort_by, 
+                        do_not_output_the_number_of_messages, 
+                        do_not_output_the_number_of_characters, 
+                        period_of_activity, 
+                        report_enabled, 
+                        project_id, 
+                        curators_group, 
+                        enable_group, 
+                        last_notify_date, 
+                        last_notify_message_id_date, 
+                        do_not_output_name_from_registration, 
+                        check_channel_subscription) 
                     VALUES (%s, %s, False, False, 'characters', False, False, 7, False, 0, False, True, 
-                    %s, %s, False, False)""", (id_chat, title, today, today))
+                    %s, %s, False, False)
+                    ON CONFLICT (id_chat) DO 
+                    UPDATE SET enable_group = True, title = %s WHERE settings.id_chat = %s""",
+                    (id_chat, title, today, today,
+                     title, id_chat))
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
@@ -115,19 +132,6 @@ class Database:
                 # self.cursor.execute("UPDATE meetings SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
                 self.cursor.execute("UPDATE messages SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
                 self.cursor.execute("UPDATE settings SET id_chat = %s WHERE id_chat = %s", (new_id_chat, id_chat))
-        except Exception as e:
-            await send_error(self.cursor.query, str(e), traceback.format_exc())
-
-    async def save_or_update_new_title(self, id_chat, title):
-        try:
-            self.cursor.execute("SELECT id_chat FROM settings WHERE id_chat = %s", (id_chat,))
-            result = self.cursor.fetchone()
-            if result is None:
-                await base.save_new_chat(id_chat, title)
-            else:
-                with self.connect:
-                    self.cursor.execute("UPDATE settings SET enable_group = True, title = %s WHERE id_chat = %s",
-                                        (title, id_chat))
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
@@ -174,7 +178,7 @@ class Database:
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-    async def insert_or_update_chats_and_users(self, id_chat, user: User, characters, date_of_the_last_message):
+    async def insert_or_update_users(self, user: User):
         try:
             id_user = user.id
             first_name = user.first_name
@@ -188,44 +192,47 @@ class Database:
             if username is None:
                 username = ''
 
-            # id_user
-            self.cursor.execute("SELECT id_user FROM users WHERE id_user = %s", (id_user,))
-            result = self.cursor.fetchone()
+            with self.connect:
+                self.cursor.execute(
+                    """INSERT INTO users(
+                        id_user, 
+                        first_name, 
+                        last_name, 
+                        username, 
+                        language_code, 
+                        registration_date, 
+                        role) 
+                    VALUES (%s, %s, %s, %s, %s, %s, 'user')
+                    ON CONFLICT (id_user) DO UPDATE SET 
+                        first_name = %s, 
+                        last_name = %s, 
+                        username = %s, 
+                        language_code = %s""",
+                    (id_user, first_name, last_name, username, language_code, get_today(),
+                     first_name, last_name, username, language_code))
 
-            if result is None:
-                text = """INSERT INTO users (id_user, first_name, last_name, username, language_code, registration_date) 
-                       VALUES (%s, %s, %s, %s, %s, %s)"""
-                values = (id_user, first_name, last_name, username, language_code, get_today())
-            else:
-                text = """UPDATE users SET 
-                            first_name = %s, 
-                            last_name = %s, 
-                            username = %s, 
-                            language_code = %s 
-                       WHERE id_user = %s"""
-                values = (first_name, last_name, username, language_code, id_user)
-            self.cursor.execute(text, values)
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-            # chats
-            self.cursor.execute("SELECT id_chat FROM chats WHERE id_chat = %s AND id_user = %s", (id_chat, id_user))
-            result = self.cursor.fetchone()
-
-            if result is None:
-                text = """INSERT INTO chats (id_chat, id_user, messages, characters, deleted, date_of_the_last_message) 
-                        VALUES (%s, %s, 1, %s, False, %s)"""
-                values = (id_chat, id_user, characters, date_of_the_last_message)
-            else:
-                text = """UPDATE chats SET 
-                            messages = messages + 1, 
-                            characters = characters + %s, 
-                            deleted = False, 
-                            date_of_the_last_message = %s 
-                       WHERE 
-                            id_chat = %s 
-                                AND id_user = %s"""
-                values = (characters, date_of_the_last_message, id_chat, id_user)
-
-            self.cursor.execute(text, values)
+    async def insert_or_update_chats(self, id_chat, id_user, characters, date_of_the_last_message):
+        try:
+            with self.connect:
+                self.cursor.execute(
+                    """INSERT INTO chats (
+                        id_chat, 
+                        id_user, 
+                        messages, 
+                        characters, 
+                        deleted, 
+                        date_of_the_last_message) 
+                    VALUES (%s, %s, 1, %s, False, %s)
+                    ON CONFLICT (id_chat, id_user) DO UPDATE SET 
+                        messages = chats.messages + 1, 
+                        characters = chats.characters + %s, 
+                        deleted = False, 
+                        date_of_the_last_message = %s""",
+                    (id_chat, id_user, characters, date_of_the_last_message,
+                     characters, date_of_the_last_message))
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())

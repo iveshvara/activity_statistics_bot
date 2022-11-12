@@ -839,31 +839,38 @@ async def homework_response(project_id, homework_date, id_user, text):
 
 
 async def registration_command(callback_message):
-    id_user = callback_message.from_user.id
-    first_name = callback_message.from_user.first_name
-    last_name = callback_message.from_user.last_name
-    if last_name is None:
-        last_name = ''
-    username = callback_message.from_user.username
-    if username is None:
-        username = ''
-    language_code = callback_message.from_user.language_code
+    # id_user = callback_message.from_user.id
+    # first_name = callback_message.from_user.first_name
+    # last_name = callback_message.from_user.last_name
+    # if last_name is None:
+    #     last_name = ''
+    # username = callback_message.from_user.username
+    # if username is None:
+    #     username = ''
+    # language_code = callback_message.from_user.language_code
 
-    cursor.execute('SELECT id_user FROM users WHERE id_user = %s', (id_user,))
-    result = cursor.fetchone()
-
-    if result is None:
-        today = get_today()
-        cursor.execute(
-            "INSERT INTO users (id_user, first_name, last_name, username, language_code, "
-            "registration_date, registration_field, fio, address, tel, mail, projects, role) "
-            "VALUES (%s, %s, %s, %s, %s, %s, NULL, NULL, NULL, NULL, NULL, NULL, 'user')",
-            (id_user, first_name, last_name, username, language_code, today))
-    else:
-        cursor.execute(
-            "UPDATE users SET first_name = %s, last_name = %s, username = %s, language_code = %s WHERE id_user = %s",
-            (first_name, last_name, username, language_code, id_user))
-    connect.commit()
+    # cursor.execute('SELECT id_user FROM users WHERE id_user = %s', (id_user,))
+    # result = cursor.fetchone()
+    #
+    # if result is None:
+    #     today = get_today()
+    #     cursor.execute(
+    #         """INSERT INTO users (
+    #             id_user,
+    #             first_name,
+    #             last_name,
+    #             username,
+    #             language_code,
+    #             registration_date,
+    #             role)
+    #         VALUES (%s, %s, %s, %s, %s, %s, 'user')""",
+    #         (id_user, first_name, last_name, username, language_code, today))
+    # else:
+    #     cursor.execute(
+    #         "UPDATE users SET first_name = %s, last_name = %s, username = %s, language_code = %s WHERE id_user = %s",
+    #         (first_name, last_name, username, language_code, id_user))
+    # connect.commit()
+    await base.insert_or_update_users(callback_message.from_user)
 
     if type(callback_message) == CallbackQuery:
         message = callback_message.message

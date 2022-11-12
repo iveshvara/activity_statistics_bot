@@ -47,8 +47,6 @@ async def command_execute_sql_code(message: Message):
 async def command_updating_deleted(message: Message):
     await message_send(message.from_user.id, 'Start')
 
-    # chat_member = await bot.get_chat_member(-1001531919077, 5751545336)
-    # member = chat_member.status == 'member'
     cursor.execute('''SELECT id_chat, id_user, deleted FROM chats''')
     result = cursor.fetchall()
     count = 0
@@ -57,37 +55,34 @@ async def command_updating_deleted(message: Message):
     for i in result:
         id_chat = i[0]
         id_user = i[1]
-        deleted = i[2]
+        # deleted = i[2]
         member = False
         count += 1
-        print(count, all_count, id_chat, id_user)
+
         try:
             chat_member = await bot.get_chat_member(id_chat, id_user)
             member = not chat_member.status == 'left'
         except Exception as e:
             pass
 
+        deleted = not member
+
+        cursor.execute(f"UPDATE chats SET deleted = {deleted} WHERE id_chat = %s AND id_user = %s", (id_chat, id_user))
+        connect.commit()
+
         if deleted:
-            if member:
-                cursor.execute("UPDATE chats SET deleted = False WHERE id_chat = %s AND id_user = %s", (id_chat, id_user))
-                connect.commit()
+            result = await base.save_user_disable_in_chat(id_chat, id_user)
+            if result is not None:
+                channel_id = result[0]
+                try:
+                    await bot.kick_chat_member(channel_id, id_user)
+                    await bot.unban_chat_member(channel_id, id_user)
+                except Exception as e:
+                    pass
 
-        else:
+        # if not await base.application_for_membership(id_user) is None:
 
-            if not member:
-                cursor.execute("UPDATE chats SET deleted = True WHERE id_chat = %s AND id_user = %s", (id_chat, id_user))
-                connect.commit()
-
-                result = await base.save_user_disable_in_chat(id_chat, id_user)
-                if result is not None:
-                    channel_id = result[0]
-                    try:
-                        await bot.kick_chat_member(channel_id, id_user)
-                        await bot.unban_chat_member(channel_id, id_user)
-                    except Exception as e:
-                        pass
-
-            # if not await base.application_for_membership(id_user) is None:
+        print(count, all_count, id_chat, id_user, deleted)
 
     await message_send(message.from_user.id, 'Done')
 
@@ -174,14 +169,12 @@ async def command_test(message: Message):
     #         connect.commit()
     #         print(id_user, q, result.index(i))
 
-    message_pb = None
-    time_point = None
-    all_count = 100000
-
-    for i in range(all_count):
-        message_pb, time_point = await message_progress_bar(message.from_user.id, all_count, i, time_point, message_pb)
-
-    await message_pb.delete()
+    try:
+        chat_member = await bot.get_chat_member(-1001606469099, 951575809)
+        print(chat_member)
+        await message_send(message.from_user.id, shielding(chat_member))
+    except Exception as e:
+        await message_send(message.from_user.id, str(e))
 
     await message_send(message.from_user.id, 'Done')
 
@@ -533,7 +526,7 @@ async def message_handler(message):
             await base.save_new_chat(id_chat, message.chat.title)
 
         elif message.content_type == 'new_chat_title':
-            await base.save_new_title(id_chat, message.chat.title)
+            await base.save_new_chat(id_chat, message.chat.title)
 
         elif message.content_type == 'migrate_to_chat_id':
             new_id_chat = message.migrate_to_chat_id
@@ -543,14 +536,14 @@ async def message_handler(message):
             for i in message.new_chat_members:
                 if i.is_bot:
                     if i.username == THIS_IS_BOT_NAME:
-                        await base.save_or_update_new_title(id_chat, message.chat.title)
+                        await base.save_new_chat(id_chat, message.chat.title)
 
                         text = f'Добавлена новая группа "{message.chat.title}"'
                         await message_send(SUPER_ADMIN_ID, text)
 
                 else:
-
-                    await base.insert_or_update_chats_and_users(id_chat, i, 0, date_of_the_last_message)
+                    await base.insert_or_update_users(i)
+                    await base.insert_or_update_chats(id_chat, i.id, 0, date_of_the_last_message)
 
         elif message.content_type == 'left_chat_member':
             i = message.left_chat_member
@@ -586,8 +579,8 @@ async def message_handler(message):
                 return
 
             await base.save_message_count(id_chat, id_user, date_of_the_last_message, characters, message_id)
-
-            await base.insert_or_update_chats_and_users(id_chat, message.from_user, characters, date_of_the_last_message)
+            await base.insert_or_update_users(message.from_user)
+            await base.insert_or_update_chats(id_chat, message.from_user.id, characters, date_of_the_last_message)
 
 
 # region dont use
