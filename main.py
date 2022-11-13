@@ -14,7 +14,6 @@ logging.basicConfig(level=logging.INFO)
 
 
 async def on_startup(_):
-    # dp.middleware.setup(LoggingMiddleware())
     asyncio.create_task(scheduler())
 
 

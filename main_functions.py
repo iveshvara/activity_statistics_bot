@@ -348,9 +348,10 @@ async def get_start_menu(id_user):
 
     if await base.registration_done(id_user):
         result = await base.application_for_membership(id_user)
-        url = result[2]
-        if url is not None and len(url) > 0:
-            inline_kb.add(AddInlBtn('Канал с лекциями', url=url))
+        if result is not None:
+            url = result[2]
+            if url is not None and len(url) > 0:
+                inline_kb.add(AddInlBtn('Канал с лекциями', url=url))
 
     if await base.its_admin_project(id_user, project_id):
         inline_kb.add(AddInlBtn(text='Рассылка по "' + project_name + '"', callback_data=f'homework {project_id}'))

@@ -1,5 +1,4 @@
 
-# from aiogram.contrib.middlewares.logging import LoggingMiddleware
 import traceback
 
 import psycopg2
@@ -13,7 +12,6 @@ from service import get_today, get_name_tg, shielding
 
 bot = Bot(TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
-# dp.middleware.setup(LoggingMiddleware())
 
 connect = psycopg2.connect(dbname='base', user='postgres', password='postgres', host='localhost')
 cursor = connect.cursor()
@@ -37,7 +35,13 @@ async def send_error(text: str, error_text: str, traceback_text: str):
         if len(traceback_text) < 500:
             traceback_result_text = traceback_text
         else:
-            my_files = ('bot_base.py', 'handlers.py', 'main.py', 'main_functions.py', 'service.py', 'utility_functions.py')
+            my_files = (
+                'bot_base.py',
+                'handlers.py',
+                'main.py',
+                'main_functions.py',
+                'service.py',
+                'utility_functions.py')
             positions_list = []
             traceback_result_text = ''
 
