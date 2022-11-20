@@ -762,5 +762,200 @@ class Database:
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
+    async def get_stat(self, id_chat, id_user=None):
+        self.cursor.execute(
+            """SELECT 
+                settings.statistics_for_everyone, 
+                settings.include_admins_in_statistics, 
+                settings.period_of_activity, 
+                settings.sort_by, 
+                settings.check_channel_subscription, 
+                coalesce(projects.channel_id, 0),
+                settings.do_not_output_name_from_registration,
+                settings.project_id,
+                COUNT(DISTINCT homework_text.date) AS homework_text
+            FROM settings 
+            LEFT OUTER JOIN projects 
+                    ON settings.project_id = projects.project_id
+            LEFT OUTER JOIN homework_text 
+                    ON settings.project_id = homework_text.project_id
+            WHERE id_chat = %s
+            GROUP BY
+                settings.statistics_for_everyone, 
+                settings.include_admins_in_statistics, 
+                settings.period_of_activity, 
+                settings.sort_by,  
+                settings.check_channel_subscription, 
+                coalesce(projects.channel_id, 0),
+                settings.do_not_output_name_from_registration,
+                settings.project_id""", (id_chat,))
+        meaning = cursor.fetchone()
+        if meaning is None:
+            await send_error(f'Не найден {id_chat}. Как такое может быть?', '', str(traceback.format_exc()))
+
+        statistics_for_everyone = meaning[0]
+        include_admins_in_statistics = meaning[1]
+        period_of_activity = meaning[2]
+        sort_by = meaning[3]
+        check_channel_subscription = meaning[4]
+        channel_id = meaning[5]
+        do_not_output_name_from_registration = meaning[6]
+        project_id = meaning[7]
+        homeworks_all = meaning[8]
+
+        if await base.its_admin(id_user) or id_user is None or statistics_for_everyone:
+            if sort_by == 'homeworks':
+                sort = 'homeworks DESC'
+            else:
+                sort = f'inactive_days ASC, {sort_by} DESC'
+            today = get_today()
+            count_messages = 0
+            cursor.execute(
+                f"""SELECT 
+                    users.id_user, 
+                    users.first_name, 
+                    COALESCE(users.last_name, ''), 
+                    COALESCE(users.username, ''), 
+                    COALESCE(users.fio, ''),
+                    SUM(COALESCE(messages.characters, 0)) AS characters, 
+                    COUNT(messages.characters) AS messages, 
+                    chats.deleted, 
+                    chats.date_of_the_last_message, 
+                    CASE 
+                        WHEN NOT chats.deleted 
+                            AND {period_of_activity} > DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
+                            THEN 0 
+                        ELSE DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
+                    END AS inactive_days,
+                    NOT role = 'user' AS admin, 
+                    COUNT(DISTINCT CASE 
+                        WHEN homework_check.status = 'Принято' 
+                            THEN homework_check.date  
+                    END) AS homeworks
+                FROM chats 
+                LEFT JOIN messages 
+                    ON chats.id_chat = messages.id_chat 
+                        AND chats.id_user = messages.id_user 
+                        AND {period_of_activity} > DATE_PART('day', '{today}' - messages.date)
+                LEFT JOIN homework_check
+                    ON chats.id_user = homework_check.id_user
+                        AND homework_check.project_id = {project_id}
+                INNER JOIN users 
+                    ON chats.id_user = users.id_user  
+                WHERE 
+                    chats.id_chat = {id_chat} 
+                    AND users.id_user IS NOT NULL
+                GROUP BY 
+                    users.id_user, 
+                    users.first_name, 
+                    COALESCE(users.last_name, ''), 
+                    COALESCE(users.username, ''), 
+                    COALESCE(users.fio, ''),
+                    chats.deleted, 
+                    chats.date_of_the_last_message, 
+                    inactive_days,
+                    NOT role = 'user'
+                ORDER BY 
+                    deleted ASC,  
+                    {sort},
+                    users.first_name""")
+            meaning = cursor.fetchall()
+
+            its_homeworks = sort_by == 'homeworks'
+            if its_homeworks:
+                text = f'*Выполнили все дз:*'
+            else:
+                text = f'*Активные участники: `Символов/Сообщений/ДЗ из {homeworks_all}`*'
+            active_members_inscription_is_shown = False
+            deleted_members_inscription_is_shown = False
+
+            for i in meaning:
+                i_id_user = i[0]
+                i_first_name = i[1]
+                i_last_name = i[2]
+                i_username = i[3]
+                if do_not_output_name_from_registration:
+                    i_fio = ''
+                else:
+                    i_fio = i[4]
+                # i_characters = reduce_large_numbers(i[5])
+                i_characters = i[5]
+                i_messages = i[6]
+                i_deleted = i[7]
+                i_date_of_the_last_message = i[8]
+                i_inactive_days = int(i[9])
+                i_admin = i[10]
+                i_homeworks = i[11]
+
+                if not include_admins_in_statistics:
+                    if i_admin:
+                        continue
+
+                if its_homeworks:
+                    if i_homeworks < homeworks_all and not i_deleted and not active_members_inscription_is_shown:
+                        active_members_inscription_is_shown = True
+                        text += f'\n\n*Выполнили не все дз:*'
+
+                    if i_homeworks == 0 and not deleted_members_inscription_is_shown:
+                        deleted_members_inscription_is_shown = True
+                        text += f'\n\n*Не выполнили ни одно дз:*'
+                        count_messages = 0
+
+                    if i_deleted:
+                        continue
+
+                else:
+                    if i_inactive_days > 0 and not i_deleted and not active_members_inscription_is_shown:
+                        active_members_inscription_is_shown = True
+                        text += f'\n\n*Неактивные участники:* `неактивен дней/ДЗ из {homeworks_all}`'
+
+                    if i_deleted and not deleted_members_inscription_is_shown:
+                        deleted_members_inscription_is_shown = True
+                        text += f'\n\n*Вышедшие участники:*'
+                        count_messages = 0
+
+                count_messages += 1
+
+                channel_subscription = ''
+                if check_channel_subscription and not channel_id == 0 and not i_deleted:
+                    member_status = False
+
+                    try:
+                        member = await bot.get_chat_member(channel_id, i_id_user)
+                        member_status = not member.status == 'left'
+                    except Exception as e:
+                        pass
+
+                    if member_status:
+                        channel_subscription = ''
+                    else:
+                        channel_subscription = '⚠️ '
+
+                specifics = ''
+                if i_deleted:
+                    data_str = shielding(i_date_of_the_last_message.strftime("%d.%m.%Y"))
+                    specifics = f' \(вне чата с {data_str}, дней назад: {i_inactive_days}\)'
+                else:
+                    if not its_homeworks:
+                        if not sort_by == 'homeworks' and i_inactive_days > 0:
+                            specifics = f'{i_inactive_days}/'
+                        else:
+                            specifics = str(i_characters) + '/' + str(i_messages) + '/'
+
+                    specifics += str(i_homeworks)
+                    specifics = ': `' + specifics + '`'
+
+                user = await get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_fio)
+                count_messages_text = str(count_messages)
+                text += f'\n{count_messages_text}\. {channel_subscription}{user}{specifics}'
+
+            if text == '*Активные участники:*\n':
+                text = 'Нет статистики для отображения\.'
+
+        else:
+            text = 'Статистику могут показать только администраторы группы\.'
+
+        return text
+
 
 base = Database()

@@ -170,7 +170,7 @@ async def command_test(message: Message):
     #         print(id_user, q, result.index(i))
 
     try:
-        chat_member = await bot.get_chat_member(-1001606469099, 951575809)
+        chat_member = await bot.get_chat_member(-736080016, 971401713)
         print(chat_member)
         await message_send(message.from_user.id, shielding(chat_member))
     except Exception as e:

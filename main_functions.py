@@ -132,7 +132,7 @@ async def get_stat(id_chat, id_user=None):
     project_id = meaning[7]
     homeworks_all = meaning[8]
 
-    if statistics_for_everyone or id_user is None or await base.its_admin(id_user):
+    if await base.its_admin(id_user) or id_user is None or statistics_for_everyone:
         if sort_by == 'homeworks':
             sort = 'homeworks DESC'
         else:
