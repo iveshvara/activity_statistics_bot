@@ -169,12 +169,22 @@ async def command_test(message: Message):
     #         connect.commit()
     #         print(id_user, q, result.index(i))
 
-    try:
-        chat_member = await bot.get_chat_member(-736080016, 971401713)
-        print(chat_member)
-        await message_send(message.from_user.id, shielding(chat_member))
-    except Exception as e:
-        await message_send(message.from_user.id, str(e))
+    # cursor.execute('''SELECT id_user FROM chats WHERE id_chat = %s''', (-1001480348352, ))
+    # result = cursor.fetchall()
+    # for i in result:
+    #     try:
+    #         id_user = i[0]
+    #         # chat_member = await bot.get_chat_member(-1001480348352, id_user)
+    #         chat_administrators = await bot.get_chat_administrators(-1001480348352)
+    #         print(chat_administrators)
+    #         # if chat_member.is_chat_admin() or chat_member.is_chat_creator() or chat_member.is_chat_owner:
+    #         #     print(chat_member)
+    #         #     await message_send(message.from_user.id, str(id_user) + ' ' + shielding(chat_member.status))
+    #     except Exception as e:
+    #         await message_send(message.from_user.id, str(id_user) + ' ' + str(e))
+
+    chat_administrators = await bot.get_chat_administrators(-1001480348352)
+    print(chat_administrators)
 
     await message_send(message.from_user.id, 'Done')
 
@@ -359,15 +369,15 @@ async def homework_functions(callback: CallbackQuery):
     status = ''
     if len(list_str) > 2:
         status = list_str[2]
-    homework_date = ''
+    homework_id = ''
     if len(list_str) > 3:
-        homework_date = datetime.datetime.strptime(list_str[3], "%Y-%m-%d").date()
+        homework_id = list_str[3]
     message_id = callback.message.message_id
 
     if status in ('homework', 'sending'):
         await callback.message.delete()
 
-    text, inline_kb, status = await homework_process(project_id, id_user, status, homework_date, message_id)
+    text, inline_kb, status = await homework_process(project_id, id_user, status, homework_id, message_id)
 
     if status == 'back':
         await menu_back(callback)
@@ -389,18 +399,18 @@ async def admin_homework_functions(callback: CallbackQuery):
     status = ''
     if len(list_str) > 2:
         status = list_str[2]
-    id_user = 0
+    homework_id = None
     if len(list_str) > 3:
-        id_user = int(list_str[3])
+        homework_id = int(list_str[3])
     id_chat = 0
     if len(list_str) > 4:
         id_chat = int(list_str[4])
-    homework_date = ''
+    id_user = 0
     if len(list_str) > 5:
-        homework_date = datetime.datetime.strptime(list_str[5], "%Y-%m-%d").date()
+        id_user = int(list_str[5])
 
     text, user_info, inline_kb, status = \
-        await admin_homework_process(project_id, id_user_admin, status, id_user, id_chat, homework_date)
+        await admin_homework_process(project_id, id_user_admin, status, id_chat, id_user, homework_id)
     text = user_info + shielding(text)
 
     if status == 'back_menu_back':
@@ -445,29 +455,29 @@ async def message_handler(message):
                 forward_id = message.forward_from.id
                 text_result = await base.get_all_info_about_user(forward_id)
                 await message_answer(message, text_result)
-            else:
-                await message_delete(message)
+            # else:
+            #     await message_delete(message)
 
         elif message.content_type == 'text':
             text = message.text
-            answer_text, project_id, homework_date, homework_id_user = await base.which_menu_to_show(id_user)
+            answer_text, project_id, homework_id, homework_id_user = await base.which_menu_to_show(id_user)
 
             if answer_text == 'registration':
                 await registration_process(message, text, False)
 
             elif answer_text == 'homework_text':
-                await message_delete(message)
+                # await message_delete(message)
 
                 text, inline_kb, status = await homework_process(project_id, id_user, 'confirm', '', text)
                 await message_answer(message, text, inline_kb)
 
             elif answer_text == 'homework_feedback':
-                await message_delete(message)
+                # await message_delete(message)
 
-                await base.set_homework_feedback(project_id, homework_date, homework_id_user, text, id_user)
+                await base.set_homework_feedback(project_id, homework_id, homework_id_user, text, id_user)
 
                 text, user_info, inline_kb, status = \
-                    await admin_homework_process(project_id, id_user, 'feedback', homework_id_user, 0, homework_date)
+                    await admin_homework_process(project_id, id_user, 'feedback', homework_id_user, 0, homework_id)
 
                 text = user_info + shielding(text)
                 message_id = await base.get_menu_message_id(id_user)
@@ -486,23 +496,23 @@ async def message_handler(message):
                 homework_inline_kb = InlineKeyboardMarkup(row_width=1)
                 homework_inline_kb.add(InlineKeyboardButton(
                     text='Посмотреть',
-                    callback_data=f'homework {project_id} feedback {homework_date}'))
+                    callback_data=f'homework {project_id} feedback {homework_id}'))
                 await message_send(homework_id_user, homework_text, homework_inline_kb)
 
             elif answer_text == 'homework_response':
                 await last_menu_message_delete(id_user)
 
-                await homework_response(project_id, homework_date, id_user, text)
+                await homework_response(project_id, homework_id, id_user, text)
 
-                inline_kb = await homework_kb(project_id, id_user, homework_date, 'response')
+                inline_kb = await homework_kb(project_id, id_user, homework_id, 'response')
                 text = shielding(text)
                 await message_answer(message, text, inline_kb)
 
-            else:
-                await message_delete(message)
-
-        else:
-            await message_delete(message)
+        #     else:
+        #         await message_delete(message)
+        #
+        # else:
+        #     await message_delete(message)
 
     else:
         id_chat = message.chat.id
