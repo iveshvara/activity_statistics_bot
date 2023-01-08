@@ -8,7 +8,7 @@ from aiogram.dispatcher import Dispatcher
 from aiogram.types import Message, User
 
 from _settings import TOKEN, SKIP_ERROR_TEXT, THIS_IS_BOT_NAME, LOGS_CHANNEL_ID
-from service import get_today, get_name_tg, shielding
+from service import get_today, get_name_tg, shielding, add_text_to_array
 
 bot = Bot(TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
@@ -455,7 +455,7 @@ class Database:
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-    async def get_user_info(self, id_user):
+    async def get_user_info_old(self, project_id, id_user):
         try:
             first_name = None
             last_name = None
@@ -477,7 +477,8 @@ class Database:
                 INNER JOIN settings 
                     ON chats.id_chat = settings.id_chat 
                     AND settings.enable_group 
-                    AND NOT settings.curators_group""", (id_user,))
+                    AND NOT settings.curators_group
+                    AND settings.project_id = %s""", (id_user, project_id))
             result = self.cursor.fetchone()
             if result is not None:
                 first_name = result[0]
@@ -487,6 +488,33 @@ class Database:
                 title = result[4]
 
             return first_name, last_name, username, fio, title
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
+
+    async def get_user_info(self, id_user):
+        try:
+            user_info = None
+
+            self.cursor.execute(
+                """SELECT 
+                    first_name, 
+                    coalesce(last_name, ''), 
+                    coalesce(username, ''), 
+                    coalesce(fio, '') 
+                FROM users 
+                WHERE id_user = %s""", (id_user, ))
+            result = self.cursor.fetchone()
+            if result is not None:
+                first_name = result[0]
+                last_name = result[1]
+                username = result[2]
+                fio = result[3]
+
+                if first_name is not None:
+                    user_info = get_name_tg(id_user, first_name, last_name, username, fio)
+
+            return user_info
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
@@ -559,7 +587,7 @@ class Database:
                         first_name = ii[1]
                         last_name = ii[2]
                         username = ii[3]
-                        text_result += await get_name_tg(id_user, first_name, last_name, username) + '\n'
+                        text_result += get_name_tg(id_user, first_name, last_name, username) + '\n'
 
             return text_result
 
@@ -790,7 +818,7 @@ class Database:
                     specifics += str(i_homeworks)
                     specifics = ': `' + specifics + '`'
 
-                user = await get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_fio)
+                user = get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_fio)
                 count_messages_text = str(count_messages)
                 text += f'\n{count_messages_text}\. {channel_subscription}{user}{specifics}'
 
@@ -959,13 +987,59 @@ class Database:
                     status_is_filled = bool(result[2])
 
             if id_user is not None:
-                first_name, last_name, username, fio, title = await base.get_user_info(id_user)
+                first_name, last_name, username, fio, title = await base.get_user_info_old(project_id, id_user)
                 if first_name is not None:
                     user_info = shielding(title.replace('\\', '')) + '\n'
-                    user_info += await get_name_tg(id_user, first_name, last_name, username, fio)
+                    user_info += get_name_tg(id_user, first_name, last_name, username, fio)
                     user_info += '\n\n'
 
             return status_meaning, accepted, status_is_filled, user_info
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
+
+    async def get_homework_text(self, project_id, homework_id, id_user):
+        try:
+            self.cursor.execute("SELECT date, text FROM homework_text WHERE project_id = %s AND homework_id = %s",
+                                (project_id, homework_id))
+            homework_text_date = self.cursor.fetchone()
+            date = shielding(homework_text_date[0].strftime("%d.%m.%Y"))
+            text = shielding(homework_text_date[1])
+            array_text = ['']
+
+            text = f'__*Задание №{homework_id} от {date}:*__\n\n{text}'
+
+            array_text = add_text_to_array(array_text, text)
+
+            self.cursor.execute(
+                """SELECT 
+                    id_user_response, 
+                    date, 
+                    text, 
+                    accepted 
+                FROM homeworks 
+                WHERE project_id = %s 
+                    AND homework_id = %s 
+                    AND id_user = %s""",
+                (project_id, homework_id, id_user))
+            result = self.cursor.fetchall()
+            for i in result:
+                i_id_user = i[0]
+                i_date = shielding(i[1].strftime("%d.%m.%Y"))
+                i_text = i[2]
+                i_accepted = i[3]
+
+                if i_accepted:
+                    i_text = 'Задание принято'
+
+                i_text = shielding(i_text)
+
+                user_info = await base.get_user_info(i_id_user)
+                text = f'\n\n\n__*{user_info} от {i_date}:*__\n{i_text}'
+
+                array_text = add_text_to_array(array_text, text)
+
+            return array_text
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())

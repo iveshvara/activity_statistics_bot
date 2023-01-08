@@ -94,23 +94,7 @@ def add_buttons_time_selection(shift):
     return inline_kb
 
 
-async def get_projects_cb(projects):
-    projects_tuple = []
-
-    inline_kb = InlineKeyboardMarkup(row_width=1)
-    for i in projects_tuple:
-        project = i
-        ok = ''
-        if project in projects:
-            ok = '✅ '
-        inline_kb.add(InlineKeyboardButton(text=ok + project, callback_data='projects ' + project))
-
-    inline_kb.add(InlineKeyboardButton(text='Готово', callback_data='projects Готово'))
-
-    return inline_kb
-
-
-async def get_name_tg(id_user, first_name, last_name, username, fio=None):
+def get_name_tg(id_user, first_name, last_name, username, fio=None):
     if first_name is None:
         first_name = ''
 
@@ -121,7 +105,7 @@ async def get_name_tg(id_user, first_name, last_name, username, fio=None):
         username = ''
 
     if fio is None or fio.split() == '' or len(fio) < 5:
-        name_user = shielding(first_name + ' ' + last_name).strip()
+        name_user = shielding(first_name + '\xa0' + last_name).strip()
     else:
         name_user = shielding(fio).strip()
     # if use_username and not i_username == '':
@@ -132,7 +116,7 @@ async def get_name_tg(id_user, first_name, last_name, username, fio=None):
     # если ошибка сохранится, то нужно попробовать хтмл разметку
     user = f'[{name_user}](tg://user?id={id_user})'
     if not username == '':
-        user += f' \(@{shielding(username)}\)'
+        user += f'\xa0\(@{shielding(username)}\)'
 
     return user
 
@@ -171,3 +155,46 @@ def message_requirements():
     #     '— Нельзя использовать форматирование. Введенное форматирование будет утеряно.\n' \
     #     '— Текст должен помещаться в одно сообщение Telegram (не больше 4096 символов).'
     return ""
+
+
+def add_text_to_array(array_text, text):
+    page_length = 4096
+    current_page = array_text[-1]
+    current_page_learn = len(current_page)
+    text_learn = len(text)
+
+    if current_page_learn + text_learn <= page_length:
+        array_text[-1] = array_text[-1] + text
+    else:
+        part_start = 0
+        part_end = page_length - current_page_learn
+        add_to_current_page = current_page_learn < page_length
+        finish = False
+        while True:
+            part_text = text[part_start:part_end]
+
+            if len(text[part_end:]) == 0:
+                finish = True
+            else:
+                part_end = part_text.rfind(' ')
+                if part_end == -1:
+                    add_to_current_page = False
+                    part_end = part_start + page_length
+                    continue
+                part_text = text[part_start:part_end]
+
+            if add_to_current_page:
+                array_text[-1] = array_text[-1] + part_text
+                add_to_current_page = False
+            else:
+                array_text.append(part_text)
+
+            # array_text[-1] = array_text[-1] + f'\n\n\~ {len(array_text)} \~'
+
+            if finish:
+                break
+
+            part_start = part_end + 1
+            part_end = part_start + page_length
+
+    return array_text

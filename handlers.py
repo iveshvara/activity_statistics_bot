@@ -1,4 +1,5 @@
 
+import time
 import datetime
 
 import requests
@@ -41,6 +42,87 @@ async def command_execute_sql_code(message: Message):
                 await message_send(message.from_user.id, str(e))
 
             await message_send(message.from_user.id, 'Done')
+
+
+@dp.message_handler(commands=['homeworks'])
+async def command_execute_sql_code(message: Message):
+    if message.from_user.id == SUPER_ADMIN_ID:
+        # with connect:
+        cursor.execute('SELECT * FROM homework_check WHERE response IS NOT NULL ORDER BY project_id, homework_id, date')
+        result = cursor.fetchall()
+        count = 0
+        all_count = len(result)
+
+        for i in result:
+            count +=1
+
+            project_id = i[0]
+            date = i[1]
+            id_user = i[2]
+            date_actual = i[3]
+            status = i[4]
+            response = i[5]
+            feedback = i[6]
+            feedback_author_id = i[7]
+            selected = i[8]
+            homework_id = i[9]
+
+            if date_actual is None:
+                date_actual = date
+
+            # date_actual = date_actual.timetuple()
+            date_actual = datetime.datetime.fromisoformat(date_actual.isoformat())
+
+            cursor.execute(
+                """INSERT INTO homeworks(
+                    project_id, 
+                    homework_id, 
+                    id_user, 
+                    date, 
+                    id_user_response, 
+                    text,
+                    accepted) 
+                VALUES (%s, %s, %s, %s, %s, %s, False)""",
+                (project_id, homework_id, id_user, date_actual, id_user, response))
+            connect.commit()
+
+            if feedback is not None:
+                date_actual = date_actual + datetime.timedelta(seconds=1)
+
+                if feedback_author_id is None:
+                    feedback_author_id = id_user
+
+                cursor.execute(
+                    """INSERT INTO homeworks(
+                        project_id, 
+                        homework_id, 
+                        id_user, 
+                        date, 
+                        id_user_response, 
+                        text,
+                        accepted) 
+                    VALUES (%s, %s, %s, %s, %s, %s, False)""",
+                    (project_id, homework_id, id_user, date_actual, feedback_author_id, response))
+                connect.commit()
+
+            if status == 'Принято':
+                date_actual = date_actual + datetime.timedelta(seconds=1)
+
+                cursor.execute(
+                    """INSERT INTO homeworks(
+                        project_id, 
+                        homework_id, 
+                        id_user, 
+                        date, 
+                        id_user_response, 
+                        accepted) 
+                    VALUES (%s, %s, %s, %s, %s, True)""",
+                    (project_id, homework_id, id_user, date_actual, id_user))
+                connect.commit()
+
+            print(str(count) + "/" + str(all_count))
+
+        await message_send(message.from_user.id, 'Done')
 
 
 @dp.message_handler(commands=['updating_deleted'])
@@ -383,6 +465,10 @@ async def homework_functions(callback: CallbackQuery):
         await menu_back(callback)
     elif status in ('homework', 'sending'):
         pass
+    elif status == 'question':
+        await bot.answer_callback_query(
+            callback.id,
+            text='Пришлите ваш ответ обычным сообщением.', show_alert=True)
     else:
         await callback_edit_text(callback, text, inline_kb)
 

@@ -70,7 +70,7 @@ async def run_reminder():
     #     first_name = i[2]
     #     last_name = i[3]
     #     username = i[4]
-    #     text += await get_name_tg(id_user, first_name, last_name, username)
+    #     text += get_name_tg(id_user, first_name, last_name, username)
     # else:
     #     if last_id_chat is not None:
     #         id_chat_text_tuple.append([last_id_chat, text])
@@ -274,7 +274,7 @@ async def get_stat(id_chat, id_user=None):
                 specifics += str(i_homeworks)
                 specifics = ': `' + specifics + '`'
 
-            user = await get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_fio)
+            user = get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_fio)
             count_messages_text = str(count_messages)
             text += f'\n{count_messages_text}\. {channel_subscription}{user}{specifics}'
 
@@ -384,26 +384,18 @@ async def keyboard_homework_all(project_id, id_user, status='text', its_admin=Fa
     return inline_kb
 
 
-async def homework_kb(project_id, homework_id=None, status='text'):
-    text_text = 'Задание'
-    text_response = 'Ваш ответ'
-    text_feedback = 'Отклик куратора'
-
-    if status == 'choice':
-        pass
-    elif status == 'text':
-        text_text = '⭕ ' + text_text
-    elif status == 'response':
-        text_response = '⭕ ' + text_response
-    elif status == 'feedback':
-        text_feedback = '⭕ ' + text_feedback
-
+async def homework_kb(project_id, homework_id, number_of_pages):
     inline_kb = InlineKeyboardMarkup(row_width=1)
-    inline_kb.row(
-        AddInlBtn(text=text_text, callback_data=f'homework {project_id} text {homework_id}'),
-        AddInlBtn(text=text_response, callback_data=f'homework {project_id} response {homework_id}'),
-        AddInlBtn(text=text_feedback, callback_data=f'homework {project_id} feedback {homework_id}')
-    )
+
+    if number_of_pages > 1:
+        array = []
+        # array.append(AddInlBtn(text='<<', callback_data=f'homework {project_id} textprev'))
+        for i in range(number_of_pages):
+            array.append(AddInlBtn(text=str(i+1), callback_data=f'homework {project_id} text{str(i)} {homework_id}'))
+        # array.append(AddInlBtn(text='>>', callback_data=f'homework {project_id} textnext'))
+        inline_kb.row(*array)
+
+    inline_kb.add(AddInlBtn(text='Как выполнить ДЗ?', callback_data=f'homework {project_id} question'))
     inline_kb.add(AddInlBtn(text='Назад', callback_data=f'homework {project_id} choice'))
 
     # cursor.execute('UPDATE homework_check SET selected = homework_id = %s WHERE project_id = %s AND id_user = %s',
@@ -927,11 +919,16 @@ async def homework_process(project_id, id_user, status, homework_id, message_tex
         text = shielding('Домашние работы')
         inline_kb = await keyboard_homework_all(project_id, id_user)
 
-    elif status == 'text':
-        status_meaning, accepted, response_is_filled, user_info = \
-            await base.get_date_status_meaning_homework(status, project_id, homework_id, id_user)
-        text = shielding(status_meaning)
-        inline_kb = await homework_kb(project_id, homework_id, status)
+    elif status[:4] == 'text':
+        page_number = status[4:]
+        if page_number == '':
+            page_number = 0
+        else:
+            page_number = int(status[4:])
+
+        array_text = await base.get_homework_text(project_id, homework_id, id_user)
+        text = array_text[page_number]
+        inline_kb = await homework_kb(project_id, homework_id, len(array_text))
 
     elif status in ('response', 'feedback'):
         status_meaning, accepted, response_is_filled, user_info = \
