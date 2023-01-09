@@ -122,3 +122,19 @@ async def message_progress_bar(user_id, all_count, count, time_point, message_pb
         time_point = datetime.datetime.now()
 
     return message_pb, time_point
+
+
+async def get_text_homework(project_id, homework_id, id_user, status):
+    page_number = status[4:]
+    if page_number == '':
+        page_number = 0
+    else:
+        page_number = int(status[4:])
+
+    array_text = await base.get_homeworks_task(project_id, homework_id, id_user)
+    number_of_pages = len(array_text)
+    page_number = min(number_of_pages - 1, page_number)
+
+    text = array_text[page_number]
+
+    return text, number_of_pages, page_number

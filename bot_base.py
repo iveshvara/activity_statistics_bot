@@ -277,6 +277,9 @@ class Database:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def get_chats_admin_user(self, project_id, id_user, id_chat):
+        if id_chat is None:
+            id_chat = 0
+
         try:
             self.cursor.execute(
                 """SELECT 
@@ -301,64 +304,64 @@ class Database:
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-    async def get_users_in_chats(self, project_id, id_chat):
-        try:
-            self.cursor.execute(
-                """SELECT
-                    chats.id_user, 
-                    users.first_name, 
-                    users.last_name, 
-                    users.username, 
-                    users.fio, 
-                    CASE
-                        WHEN users.fio IS NULL
-                            THEN concat(users.first_name, ' ', users.last_name) 
-                        ELSE users.fio 
-                    END AS name, 
-                    SUM(CASE 
-                        WHEN homework_check.status = 'На проверке' 
-                            THEN 1 
-                        ELSE 0 
-                    END) AS НаПроверке,
-                    SUM(CASE 
-                        WHEN homework_check.status = 'Принято'
-                            THEN 1
-                        ELSE 0 
-                    END) AS Принято,
-                    SUM(CASE 
-                        WHEN homework_check.status IN ('Получено', 'Возвращено')
-                            THEN 1
-                        ELSE 0 
-                    END) AS Получено
-                FROM users
-                    INNER JOIN chats 
-                        ON users.id_user = chats.id_user 
-                            AND NOT chats.deleted 
-                            AND users.role = 'user' 
-                LEFT JOIN homework_check 
-                    ON homework_check.project_id = %s 
-                        AND homework_check.id_user = chats.id_user  
-                WHERE 
-                    chats.id_chat = %s 
-                GROUP BY 
-                    chats.id_user, 
-                    users.first_name, 
-                    users.last_name, 
-                    users.username, 
-                    users.fio, 
-                    CASE 
-                        WHEN users.fio IS NULL
-                            THEN concat(users.first_name, ' ', users.last_name)
-                        ELSE users.fio 
-                    END
-                ORDER BY
-                    НаПроверке DESC, Принято, name""", (project_id, id_chat))
-            result = self.cursor.fetchall()
-
-            return result
-
-        except Exception as e:
-            await send_error(self.cursor.query, str(e), traceback.format_exc())
+    # async def get_users_in_chats(self, project_id, id_chat):
+    #     try:
+    #         self.cursor.execute(
+    #             """SELECT
+    #                 chats.id_user,
+    #                 users.first_name,
+    #                 users.last_name,
+    #                 users.username,
+    #                 users.fio,
+    #                 CASE
+    #                     WHEN users.fio IS NULL
+    #                         THEN concat(users.first_name, ' ', users.last_name)
+    #                     ELSE users.fio
+    #                 END AS name,
+    #                 SUM(CASE
+    #                     WHEN homework_check.status = 'На проверке'
+    #                         THEN 1
+    #                     ELSE 0
+    #                 END) AS НаПроверке,
+    #                 SUM(CASE
+    #                     WHEN homework_check.status = 'Принято'
+    #                         THEN 1
+    #                     ELSE 0
+    #                 END) AS Принято,
+    #                 SUM(CASE
+    #                     WHEN homework_check.status IN ('Получено', 'Возвращено')
+    #                         THEN 1
+    #                     ELSE 0
+    #                 END) AS Получено
+    #             FROM users
+    #                 INNER JOIN chats
+    #                     ON users.id_user = chats.id_user
+    #                         AND NOT chats.deleted
+    #                         AND users.role = 'user'
+    #             LEFT JOIN homework_check
+    #                 ON homework_check.project_id = %s
+    #                     AND homework_check.id_user = chats.id_user
+    #             WHERE
+    #                 chats.id_chat = %s
+    #             GROUP BY
+    #                 chats.id_user,
+    #                 users.first_name,
+    #                 users.last_name,
+    #                 users.username,
+    #                 users.fio,
+    #                 CASE
+    #                     WHEN users.fio IS NULL
+    #                         THEN concat(users.first_name, ' ', users.last_name)
+    #                     ELSE users.fio
+    #                 END
+    #             ORDER BY
+    #                 НаПроверке DESC, Принято, name""", (project_id, id_chat))
+    #         result = self.cursor.fetchall()
+    #
+    #         return result
+    #
+    #     except Exception as e:
+    #         await send_error(self.cursor.query, str(e), traceback.format_exc())
 
     async def get_all_projects(self):
         try:
@@ -422,33 +425,35 @@ class Database:
                 --registration
                 coalesce((SELECT True FROM users WHERE id_user = {id_user} AND NOT registration_field = 'done'), False), 
                 
-                --homework_text
+                --homeworks_task
                 coalesce((SELECT project_id FROM project_administrators WHERE id_user = {id_user} AND status = 'text'), 0), 
                 
                 --homework_feedback
-                coalesce((SELECT project_id FROM homework_check WHERE admin_id = {id_user} AND NOT response IS NULL), 0), 
-                (SELECT homework_id FROM homework_check WHERE admin_id = {id_user} AND NOT response IS NULL), 
-                (SELECT id_user FROM homework_check WHERE admin_id = {id_user} AND NOT response IS NULL), 
+                --coalesce((SELECT project_id FROM homework_check WHERE admin_id = {id_user} AND NOT response IS NULL), 0), 
+                --(SELECT homework_id FROM homework_check WHERE admin_id = {id_user} AND NOT response IS NULL), 
+                --(SELECT id_user FROM homework_check WHERE admin_id = {id_user} AND NOT response IS NULL), 
                 
                 --homework_response
-                coalesce((SELECT project_id FROM homework_check WHERE id_user = {id_user} AND NOT status = 'Принято' AND selected = True), 0), 
-                (SELECT homework_id FROM homework_check WHERE id_user = {id_user} AND NOT status = 'Принято' AND selected = True)""")
+                coalesce((SELECT project_id FROM homeworks_status WHERE id_user = {id_user} AND selected), 0), 
+                (SELECT homework_id FROM homeworks_status WHERE id_user = {id_user} AND selected)""")
             result = self.cursor.fetchone()
 
             if result[0]:
                 answer_text = 'registration'
             elif result[1] > 0:
-                answer_text = 'homework_text'
+                answer_text = 'homeworks_task'
                 project_id = result[1]
             elif result[2] > 0:
-                answer_text = 'homework_feedback'
+            #     answer_text = 'homework_feedback'
+            #     project_id = result[2]
+            #     homework_id = result[3]
+            #     homework_id_user = result[4]
+            # elif result[5] > 0:
+                answer_text = 'homework_response'
+                # project_id = result[5]
+                # homework_id = result[6]
                 project_id = result[2]
                 homework_id = result[3]
-                homework_id_user = result[4]
-            elif result[5] > 0:
-                answer_text = 'homework_response'
-                project_id = result[5]
-                homework_id = result[6]
 
             return answer_text, project_id, homework_id, homework_id_user
 
@@ -646,12 +651,12 @@ class Database:
                 coalesce(projects.channel_id, 0),
                 settings.do_not_output_name_from_registration,
                 settings.project_id,
-                COUNT(DISTINCT homework_text.date) AS homework_text
+                COUNT(DISTINCT homeworks_task.date) AS homeworks_task
             FROM settings 
             LEFT OUTER JOIN projects 
                     ON settings.project_id = projects.project_id
-            LEFT OUTER JOIN homework_text 
-                    ON settings.project_id = homework_text.project_id
+            LEFT OUTER JOIN homeworks_task 
+                    ON settings.project_id = homeworks_task.project_id
             WHERE id_chat = %s
             GROUP BY
                 settings.statistics_for_everyone, 
@@ -701,18 +706,15 @@ class Database:
                         ELSE DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
                     END AS inactive_days,
                     NOT role = 'user' AS admin, 
-                    COUNT(DISTINCT CASE 
-                        WHEN homework_check.status = 'Принято' 
-                            THEN homework_check.date  
-                    END) AS homeworks
+                    COUNT(homeworks_status.accepted) AS homeworks
                 FROM chats 
                 LEFT JOIN messages 
                     ON chats.id_chat = messages.id_chat 
                         AND chats.id_user = messages.id_user 
                         AND {period_of_activity} > DATE_PART('day', '{today}' - messages.date)
-                LEFT JOIN homework_check
-                    ON chats.id_user = homework_check.id_user
-                        AND homework_check.project_id = {project_id}
+                LEFT JOIN homeworks_status
+                    ON chats.id_user = homeworks_status.id_user
+                        AND homeworks_status.project_id = {project_id}
                 INNER JOIN users 
                     ON chats.id_user = users.id_user  
                 WHERE 
@@ -834,88 +836,86 @@ class Database:
         try:
             self.cursor.execute(
                 """SELECT 
-                    homework_text.homework_id, 
-                    homework_text.date, 
-                    COALESCE(homework_check.status, 'Получено') 
-                FROM homework_text 
-                LEFT JOIN homework_check 
-                    ON homework_text.project_id = homework_check.project_id
-                    AND homework_text.homework_id = homework_check.homework_id
-                    AND homework_check.id_user = %s
-                WHERE homework_text.project_id = %s
-                ORDER BY homework_text.homework_id""",
+                    homeworks_task.homework_id, 
+                    homeworks_task.date, 
+                    COALESCE(homeworks_status.accepted, False) 
+                FROM homeworks_task 
+                LEFT JOIN homeworks_status 
+                    ON homeworks_task.project_id = homeworks_status.project_id
+                    AND homeworks_task.homework_id = homeworks_status.homework_id
+                    AND homeworks_status.id_user = %s
+					AND homeworks_status.accepted
+                WHERE homeworks_task.project_id = %s
+                ORDER BY homeworks_task.homework_id""",
                 (id_user, project_id))
             return self.cursor.fetchall()
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-    async def get_users_status_homeworks_in_chats(self, project_id, id_chat):
+    # async def get_users_status_homeworks_in_chats(self, project_id, id_chat):
+    #     try:
+    #         self.cursor.execute(
+    #             """SELECT DISTINCT
+    #                 homework_check.status,
+    #                 users.id_user,
+    #                 CASE
+    #                     WHEN users.fio IS NULL
+    #                         THEN concat(users.first_name, ' ', users.last_name)
+    #                     ELSE users.fio
+    #                 END AS name,
+    #                 CASE
+    #                     WHEN homework_check.status = 'На проверке'
+    #                         THEN 0
+    #                     WHEN homework_check.status = 'Возвращено'
+    #                         THEN 1
+    #                     WHEN homework_check.status = 'Получено'
+    #                         THEN 2
+    #                     ELSE 3
+    #                 END AS sorting
+    #             FROM users
+    #                 INNER JOIN chats
+    #                     ON users.id_user = chats.id_user
+    #                         AND NOT chats.deleted
+    #                         AND users.role = 'user'
+    #             LEFT JOIN homework_check
+    #                 ON homework_check.project_id = %s
+    #                     AND homework_check.id_user = chats.id_user
+    #             WHERE
+    #                 chats.id_chat = %s
+    #             ORDER BY
+    #                 sorting,
+    #                 name""", (project_id, id_chat))
+    #         result = self.cursor.fetchall()
+    #
+    #         return result
+    #
+    #     except Exception as e:
+    #         await send_error(self.cursor.query, str(e), traceback.format_exc())
+
+    async def get_users_status_homework_in_chat(self, project_id, id_chat, homework_id):
         try:
             self.cursor.execute(
                 """SELECT DISTINCT
-                    homework_check.status, 
                     users.id_user, 
                     CASE
                         WHEN users.fio IS NULL
                             THEN concat(users.first_name, ' ', users.last_name) 
                         ELSE users.fio 
                     END AS name,
-                    CASE
-                        WHEN homework_check.status = 'На проверке'
-                            THEN 0
-                        WHEN homework_check.status = 'Возвращено'
-                            THEN 1
-                        WHEN homework_check.status = 'Получено'
-                            THEN 2
-                        ELSE 3 
-                    END AS sorting
+                    COALESCE(homeworks_status.accepted, False)
                 FROM users
                     INNER JOIN chats 
                         ON users.id_user = chats.id_user 
                             AND NOT chats.deleted 
-                            AND users.role = 'user' 
-                LEFT JOIN homework_check 
-                    ON homework_check.project_id = %s 
-                        AND homework_check.id_user = chats.id_user  
-                WHERE 
-                    chats.id_chat = %s 
+                            AND users.role = 'user'
+                            AND chats.id_chat = %s 
+                LEFT JOIN homeworks_status 
+                    ON homeworks_status.project_id = %s 
+                        AND homeworks_status.id_user = chats.id_user
+                        AND homeworks_status.homework_id = %s
                 ORDER BY
-                    sorting,
-                    name""", (project_id, id_chat))
-            result = self.cursor.fetchall()
-
-            return result
-
-        except Exception as e:
-            await send_error(self.cursor.query, str(e), traceback.format_exc())
-
-    async def get_users_status_homework_in_chat(self, project_id, id_chat, homework_id, only_check=False):
-        try:
-            self.cursor.execute(
-                """SELECT DISTINCT
-                    users.id_user, 
-                    CASE
-                        WHEN users.fio IS NULL
-                            THEN concat(users.first_name, ' ', users.last_name) 
-                        ELSE users.fio 
-                    END AS name,
-                    homework_check.status
-                FROM users
-                    INNER JOIN chats 
-                        ON users.id_user = chats.id_user 
-                            AND NOT chats.deleted 
-                            AND users.role = 'user' 
-                LEFT JOIN homework_check 
-                    ON homework_check.project_id = %s 
-                        AND homework_check.id_user = chats.id_user  
-                WHERE 
-                    chats.id_chat = %s 
-                        AND homework_check.homework_id = %s
-                        AND (NOT %s 
-                            OR homework_check.status = 'На проверке')
-                ORDER BY
-                    name""", (project_id, id_chat, homework_id, only_check))
+                    name""", (id_chat, project_id, homework_id))
             result = self.cursor.fetchall()
 
             return result
@@ -926,7 +926,7 @@ class Database:
     async def get_homework_id_last_homework(self, project_id):
         try:
             homework_id = None
-            self.cursor.execute("SELECT homework_id FROM homework_text WHERE project_id = %s ORDER BY date DESC LIMIT 1",
+            self.cursor.execute("SELECT homework_id FROM homeworks_task WHERE project_id = %s ORDER BY date DESC LIMIT 1",
                                 (project_id,))
             result = self.cursor.fetchone()
             if result is not None and not result[0] in ('', None):
@@ -941,33 +941,32 @@ class Database:
         try:
             status_meaning = 'Нет домашних работ'
             accepted = False
-            status_is_filled = False
+            # status_is_filled = False
             user_info = ''
 
             if status == 'text' and id_user is None:
-                self.cursor.execute("SELECT text FROM homework_text WHERE project_id = %s AND homework_id = %s",
+                self.cursor.execute("SELECT text FROM homeworks_task WHERE project_id = %s AND homework_id = %s",
                                     (project_id, homework_id))
                 status_meaning = self.cursor.fetchone()[0]
 
             elif status == 'text' and id_user is not None:
                 self.cursor.execute(
                     """SELECT 
-                        text, 
-                        status = 'Принято', 
-                        NOT response IS NULL 
-                    FROM homework_text 
-                    INNER JOIN homework_check 
-                        ON homework_text.project_id = %s 
-                            AND homework_text.homework_id = %s
-                            AND homework_text.project_id = homework_check.project_id
-                            AND homework_text.date = homework_check.date
-                            AND homework_check.id_user = %s""",
-                    (project_id, homework_id, id_user))
+                        homeworks_task.text, 
+                        homeworks_status.accepted 
+                    FROM homeworks_task 
+                    INNER JOIN homeworks_status 
+                        ON homeworks_task.project_id = %s   
+                            AND homeworks_task.project_id = homeworks_status.project_id
+                            AND homeworks_status.id_user = %s
+                            AND homeworks_task.homework_id = %s
+                            AND homeworks_task.homework_id = homeworks_status.homework_id""",
+                    (project_id, id_user, homework_id))
                 result = self.cursor.fetchone()
                 if result is not None:
                     status_meaning = result[0]
                     accepted = bool(result[1])
-                    status_is_filled = bool(result[2])
+                    # status_is_filled = bool(result[2])
 
             elif status in ('response', 'feedback'):
                 self.cursor.execute(
@@ -975,7 +974,7 @@ class Database:
                         {status}, 
                         status = 'Принято', 
                         NOT response IS NULL 
-                    FROM homework_check 
+                    FROM homeworks_status 
                     WHERE 
                         project_id = %s 
                             AND homework_id = %s 
@@ -984,7 +983,7 @@ class Database:
                 if result is not None:
                     status_meaning = result[0]
                     accepted = bool(result[1])
-                    status_is_filled = bool(result[2])
+                    # status_is_filled = bool(result[2])
 
             if id_user is not None:
                 first_name, last_name, username, fio, title = await base.get_user_info_old(project_id, id_user)
@@ -993,96 +992,162 @@ class Database:
                     user_info += get_name_tg(id_user, first_name, last_name, username, fio)
                     user_info += '\n\n'
 
-            return status_meaning, accepted, status_is_filled, user_info
+            return status_meaning, accepted, user_info
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-    async def get_homework_text(self, project_id, homework_id, id_user):
+    async def get_homeworks_task(self, project_id, homework_id, id_user):
         try:
-            self.cursor.execute("SELECT date, text FROM homework_text WHERE project_id = %s AND homework_id = %s",
-                                (project_id, homework_id))
-            homework_text_date = self.cursor.fetchone()
-            date = shielding(homework_text_date[0].strftime("%d.%m.%Y"))
-            text = shielding(homework_text_date[1])
-            array_text = ['']
+            self.cursor.execute(
+                "SELECT date, text FROM homeworks_task WHERE project_id = %s AND homework_id = %s",
+                (project_id, homework_id))
+            homeworks_task_date = self.cursor.fetchone()
 
+            date = shielding(homeworks_task_date[0].strftime("%d.%m.%Y"))
+            text = shielding(homeworks_task_date[1])
             text = f'__*Задание №{homework_id} от {date}:*__\n\n{text}'
 
+            array_text = ['']
             array_text = add_text_to_array(array_text, text)
 
             self.cursor.execute(
                 """SELECT 
                     id_user_response, 
                     date, 
-                    text, 
-                    accepted 
-                FROM homeworks 
+                    text 
+                FROM homeworks_answers 
                 WHERE project_id = %s 
                     AND homework_id = %s 
                     AND id_user = %s""",
                 (project_id, homework_id, id_user))
             result = self.cursor.fetchall()
+            # last_user_info = ''
             for i in result:
                 i_id_user = i[0]
-                i_date = shielding(i[1].strftime("%d.%m.%Y"))
+                i_date = shielding(i[1].strftime("%d.%m.%Y %H:%M:%S"))
                 i_text = i[2]
-                i_accepted = i[3]
-
-                if i_accepted:
-                    i_text = 'Задание принято'
 
                 i_text = shielding(i_text)
 
                 user_info = await base.get_user_info(i_id_user)
-                text = f'\n\n\n__*{user_info} от {i_date}:*__\n{i_text}'
+                heading = f'\n\n\n__*{user_info} от {i_date}:*__'
+                heading = heading.replace(' ', '\xa0')
+                text = heading + '\n' + i_text
+                # if last_user_info == user_info:
+                #     text = f'\n{i_text}'
+                # else:
+                #     last_user_info = user_info
+                #     text = f'\n\n\n__*{user_info} от {i_date}:*__\n{i_text}'
 
                 array_text = add_text_to_array(array_text, text)
+
+            # array_text_len = len(array_text)
+            # for i in range(array_text_len):
+            #     array_text[i] += f'\n\n\_\_\_\_\_\n\~ {i+1} \~'
 
             return array_text
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-    async def set_status_homework(self, project_id, homework_id, id_user, status, set_date=False):
+    async def get_status_homework(self, project_id, homework_id, id_user):
         try:
-            if set_date:
-                date_actual = get_today(True)
+            self.cursor.execute(
+                "SELECT accepted FROM homeworks_status WHERE project_id = %s AND homework_id = %s AND id_user = %s",
+                (project_id, homework_id, id_user))
+            result = self.cursor.fetchone()
+            if result is None:
+                status = False
             else:
-                date_actual = None
+                status = result[0]
 
-            with self.connect:
-                self.cursor.execute(
-                    """UPDATE homework_check SET status = %s, date_actual = %s 
-                    WHERE project_id = %s AND homework_id = %s AND id_user = %s""",
-                    (status, date_actual, project_id, homework_id, id_user))
+            return status
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-    async def set_admin_homework(self, project_id, homework_id, id_user, id_user_admin):
+
+    async def set_status_homework(self, project_id, homework_id, id_user, id_user_response, status=True):
         try:
             with self.connect:
                 self.cursor.execute(
-                    "UPDATE homework_check SET admin_id = NULL WHERE project_id = %s",
-                    (project_id,))
-                self.cursor.execute(
-                    "UPDATE homework_check SET admin_id = %s WHERE project_id = %s AND homework_id = %s AND id_user = %s",
-                    (id_user_admin, project_id, homework_id, id_user))
+                    """INSERT INTO homeworks_status(
+                        project_id,
+                        homework_id,
+                        id_user,
+                        accepted,
+                        selected)
+                    VALUES (%s, %s, %s, %s, False)
+                    ON CONFLICT (project_id, homework_id, id_user) DO UPDATE SET
+                        accepted = %s""",
+                    (project_id, homework_id, id_user, status, status))
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-    async def set_homework_feedback(self, project_id, homework_id, id_user, feedback, feedback_author_id):
+        if status:
+            text = '# Задание принято.'
+        else:
+            text = '# Задание возвращено на доработку.'
+
+        await base.insert_homework_response(project_id, homework_id, id_user, id_user_response, text)
+
+    # async def set_admin_homework(self, project_id, homework_id, id_user, id_user_admin):
+    #     try:
+    #         with self.connect:
+    #             self.cursor.execute(
+    #                 "UPDATE homework_check SET admin_id = NULL WHERE project_id = %s",
+    #                 (project_id,))
+    #             self.cursor.execute(
+    #                 "UPDATE homework_check SET admin_id = %s WHERE project_id = %s AND homework_id = %s AND id_user = %s",
+    #                 (id_user_admin, project_id, homework_id, id_user))
+    #
+    #     except Exception as e:
+    #         await send_error(self.cursor.query, str(e), traceback.format_exc())
+
+    async def insert_homework_response(self, project_id, homework_id, id_user, id_user_response, text=''):
         try:
             with self.connect:
                 self.cursor.execute(
-                    """UPDATE homework_check SET feedback = %s, feedback_author_id = %s 
-                    WHERE project_id = %s AND homework_id = %s AND id_user = %s""",
-                    (feedback, feedback_author_id, project_id, homework_id, id_user))
+                    """INSERT INTO homeworks_answers(
+                        project_id,  
+                        homework_id, 
+                        id_user, 
+                        id_user_response, 
+                        date, 
+                        text,  
+                        counter) 
+                    VALUES (%s, %s, %s, %s, NOW(), %s, 1)""" , # date_trunc('second', NOW())
+                    (project_id, homework_id, id_user, id_user_response, text))
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
+    async def update_selected_homeworks(self, id_user, homework_id=None, project_id=None, selected=False):
+        try:
+            if homework_id is None:
+                homework_id = 0
+
+            with self.connect:
+                if project_id is None:
+                    self.cursor.execute(
+                        'UPDATE homeworks_status SET selected = homework_id = %s WHERE id_user = %s',
+                        (homework_id, id_user))
+                else:
+                    self.cursor.execute(
+                        """INSERT INTO homeworks_status(
+                            project_id,
+                            homework_id,
+                            id_user,
+                            accepted,
+                            selected)
+                        VALUES (%s, %s, %s, False, %s)
+                        ON CONFLICT (project_id, homework_id, id_user) DO UPDATE SET
+                            selected = homeworks_status.homework_id = %s""",
+                        (project_id, homework_id, id_user, selected, homework_id))
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
 
 base = Database()

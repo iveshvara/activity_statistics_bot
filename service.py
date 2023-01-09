@@ -105,8 +105,9 @@ def get_name_tg(id_user, first_name, last_name, username, fio=None):
         username = ''
 
     if fio is None or fio.split() == '' or len(fio) < 5:
-        name_user = shielding(first_name + '\xa0' + last_name).strip()
+        name_user = shielding(first_name + ' ' + last_name).strip()
     else:
+
         name_user = shielding(fio).strip()
     # if use_username and not i_username == '':
     #     # user = '@' + i_username
@@ -116,7 +117,9 @@ def get_name_tg(id_user, first_name, last_name, username, fio=None):
     # если ошибка сохранится, то нужно попробовать хтмл разметку
     user = f'[{name_user}](tg://user?id={id_user})'
     if not username == '':
-        user += f'\xa0\(@{shielding(username)}\)'
+        user += f' \(@{shielding(username)}\)'
+
+    user = user.replace(' ', '\xa0')
 
     return user
 
@@ -189,7 +192,7 @@ def add_text_to_array(array_text, text):
             else:
                 array_text.append(part_text)
 
-            # array_text[-1] = array_text[-1] + f'\n\n\~ {len(array_text)} \~'
+            # array_text[-1] += f'\n\n\~ {len(array_text)} \~'
 
             if finish:
                 break
