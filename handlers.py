@@ -1,5 +1,4 @@
 
-import time
 import datetime
 
 import requests
@@ -88,6 +87,10 @@ async def command_execute_sql_code(message: Message):
                 (project_id, homework_id, id_user, status == 'Принято', status == 'Принято'))
             connect.commit()
 
+            counter = 0
+            if status == 'На проверке':
+                counter = 1
+
             cursor.execute(
                 """INSERT INTO homeworks_answers(
                     project_id, 
@@ -97,8 +100,8 @@ async def command_execute_sql_code(message: Message):
                     text,
                     date, 
                     counter) 
-                VALUES (%s, %s, %s, %s, %s, %s, 0)""",
-                (project_id, homework_id, id_user, id_user, response, date_actual))
+                VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (project_id, homework_id, id_user, id_user, response, date_actual, counter))
             connect.commit()
 
             if feedback is not None:
@@ -509,7 +512,7 @@ async def admin_homework_functions(callback: CallbackQuery):
         homework_id = int(list_str[4])
     id_user = None
     if len(list_str) > 5:
-        homework_id = int(list_str[5])
+        id_user = int(list_str[5])
 
     text, inline_kb, status = await admin_homework_process(project_id, id_user_admin, status, id_chat, homework_id, id_user)
 
@@ -592,12 +595,12 @@ async def message_handler(message):
                     except Exception as e:
                         pass
 
-                homework_text = shielding('На ваше домашнее задание получен отклик куратора.')
-                homework_inline_kb = InlineKeyboardMarkup(row_width=1)
-                homework_inline_kb.add(InlineKeyboardButton(
-                    text='Посмотреть',
-                    callback_data=f'homework {project_id} feedback {homework_id}'))
-                await message_send(homework_id_user, homework_text, homework_inline_kb)
+                # homework_text = shielding('На ваше домашнее задание получен отклик куратора.')
+                # homework_inline_kb = InlineKeyboardMarkup(row_width=1)
+                # homework_inline_kb.add(InlineKeyboardButton(
+                #     text='Посмотреть',
+                #     callback_data=f'homework {project_id} feedback {homework_id}'))
+                # await message_send(homework_id_user, homework_text, homework_inline_kb)
 
             elif answer_text == 'homework_response':
                 await base.insert_homework_response(project_id, homework_id, id_user, id_user, text)
