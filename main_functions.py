@@ -643,8 +643,8 @@ async def homework_process(project_id, id_user, status, homework_id, message_tex
                     AND settings.project_id = %s
             INNER JOIN users 
                 ON chats.id_user = users.id_user 
-             INNER JOIN project_administrators 
-                ON users.id_user = project_administrators.id_user''',
+            -- INNER JOIN project_administrators 
+            --     ON users.id_user = project_administrators.id_user''',
             (project_id,)
         )
         meaning = cursor.fetchall()

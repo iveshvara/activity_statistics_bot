@@ -296,7 +296,8 @@ class Database:
                             AND settings.project_id = %s 
                 WHERE 
                     users.id_user = %s
-                        AND (%s OR chats.id_chat = %s)""", (project_id, id_user, id_chat == 0, id_chat))
+                        AND (%s OR chats.id_chat = %s)""",
+                (project_id, id_user, id_chat == 0, id_chat))
             result = self.cursor.fetchall()
 
             return result
