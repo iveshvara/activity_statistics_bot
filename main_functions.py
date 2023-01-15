@@ -431,11 +431,13 @@ async def homework_kb(project_id, homework_id, id_user, number_of_pages=1, page_
 
         inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} choice {id_chat} {homework_id}'))
 
+        await base.update_selected_homeworks(id_user, homework_id, project_id, id_user_admin)
+
     else:
         inline_kb.add(AddInlBtn(text='Как выполнить ДЗ?', callback_data=f'homework {project_id} question'))
         inline_kb.add(AddInlBtn(text='Назад', callback_data=f'homework {project_id} choice'))
 
-        await base.update_selected_homeworks(id_user, homework_id, project_id, True)
+        await base.update_selected_homeworks(id_user, homework_id, project_id, id_user)
 
     return inline_kb
 
@@ -468,37 +470,39 @@ async def admin_homework_process(project_id, id_user_admin, status, id_chat, hom
                 await admin_homework_process(project_id, id_user_admin, status, id_chat, homework_id, id_user)
 
     else:
+        if status == 'choice':
+            await base.update_selected_homeworks(id_user_admin)
 
-        if status == 'choice' and homework_id is None:
-            text = shielding('Домашние работы')
-            inline_kb = await keyboard_homework_all(project_id, id_user, status, True, id_chat)
+            if homework_id is None:
+                text = shielding('Домашние работы')
+                inline_kb = await keyboard_homework_all(project_id, id_user, status, True, id_chat)
 
-        elif status == 'choice' and homework_id is not None:
-            chats = await base.get_chats_admin_user(project_id, id_user_admin, id_chat)
-            current_chat = chats[0]
-            title = current_chat[1]
-            #
-            users = await base.get_users_status_homework_in_chat(project_id, id_chat, homework_id)
+            else:
+                chats = await base.get_chats_admin_user(project_id, id_user_admin, id_chat)
+                current_chat = chats[0]
+                title = current_chat[1]
+                #
+                users = await base.get_users_status_homework_in_chat(project_id, id_chat, homework_id)
 
-            counter = 0
-            for i in users:
-                counter += 1
-                i_id_user = i[0]
-                i_name = i[1]
-                homework_status = ''
-                if i[2]:
-                    homework_status = '✅'
-                i_counter = ''
-                if i[3] > 0:
-                    i_counter = f' ({i[3]})'
+                counter = 0
+                for i in users:
+                    counter += 1
+                    i_id_user = i[0]
+                    i_name = i[1]
+                    homework_status = ''
+                    if i[2]:
+                        homework_status = '✅'
+                    i_counter = ''
+                    if i[3] > 0:
+                        i_counter = f' ({i[3]})'
 
-                inline_kb.add(AddInlBtn(
-                    text=f'{homework_status} {counter}. {i_name}{i_counter}',
-                    callback_data=f'admin_homework {project_id} text {id_chat} {homework_id} {i_id_user}'))
+                    inline_kb.add(AddInlBtn(
+                        text=f'{homework_status} {counter}. {i_name}{i_counter}',
+                        callback_data=f'admin_homework {project_id} text {id_chat} {homework_id} {i_id_user}'))
 
-            inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} group {id_chat}'))
+                inline_kb.add(AddInlBtn(text='Назад', callback_data=f'admin_homework {project_id} group {id_chat}'))
 
-            text = shielding(title + '\n Домашнее задание №' + str(homework_id))
+                text = shielding(title + '\n Домашнее задание №' + str(homework_id))
 
         elif status[:4] == 'text' or status in ('response', 'feedback'):
             if status == 'text':

@@ -45,105 +45,6 @@ async def command_execute_sql_code(message: Message):
             await message_send(message.from_user.id, 'Done')
 
 
-@dp.message_handler(commands=['homeworks'])
-async def command_execute_sql_code(message: Message):
-    if message.from_user.id == SUPER_ADMIN_ID:
-        cursor.execute('SELECT * FROM homework_check WHERE response IS NOT NULL ORDER BY project_id, homework_id, date')
-        result = cursor.fetchall()
-        count = 0
-        all_count = len(result)
-
-        for i in result:
-            count +=1
-
-            project_id = i[0]
-            date = i[1]
-            id_user = i[2]
-            date_actual = i[3]
-            status = i[4]
-            response = i[5]
-            feedback = i[6]
-            feedback_author_id = i[7]
-            selected = i[8]
-            homework_id = i[9]
-
-            if date_actual is None:
-                date_actual = date
-
-            # date_actual = date_actual.timetuple()
-            date_actual = datetime.datetime.fromisoformat(date_actual.isoformat())
-
-            cursor.execute(
-                """INSERT INTO homeworks_status(
-                    project_id, 
-                    homework_id, 
-                    id_user, 
-                    accepted, 
-                    selected) 
-                VALUES (%s, %s, %s, %s, False)
-                ON CONFLICT (project_id, homework_id, id_user) DO UPDATE SET 
-                    accepted = %s, 
-                    selected = False""",
-                (project_id, homework_id, id_user, status == 'Принято', status == 'Принято'))
-            connect.commit()
-
-            counter = 0
-            if status == 'На проверке':
-                counter = 1
-
-            cursor.execute(
-                """INSERT INTO homeworks_answers(
-                    project_id, 
-                    homework_id, 
-                    id_user, 
-                    id_user_response, 
-                    text,
-                    date, 
-                    counter) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                (project_id, homework_id, id_user, id_user, response, date_actual, counter))
-            connect.commit()
-
-            if feedback is not None:
-                date_actual = date_actual + datetime.timedelta(seconds=1)
-
-                if feedback_author_id is None:
-                    feedback_author_id = id_user
-
-                cursor.execute(
-                    """INSERT INTO homeworks_answers(
-                        project_id, 
-                        homework_id, 
-                        id_user, 
-                        id_user_response, 
-                        text,
-                        date, 
-                        counter) 
-                    VALUES (%s, %s, %s, %s, %s, %s, 0)""",
-                    (project_id, homework_id, id_user, feedback_author_id, feedback, date_actual))
-                connect.commit()
-
-            if status == 'Принято':
-                date_actual = date_actual + datetime.timedelta(seconds=1)
-
-                cursor.execute(
-                    """INSERT INTO homeworks_answers(
-                        project_id, 
-                        homework_id, 
-                        id_user, 
-                        id_user_response, 
-                        text,
-                        date, 
-                        counter) 
-                    VALUES (%s, %s, %s, %s, %s, %s, 0)""",
-                    (project_id, homework_id, id_user, id_user, '# Задание принято.', date_actual))
-                connect.commit()
-
-            print(str(count) + "/" + str(all_count))
-
-        await message_send(message.from_user.id, 'Done')
-
-
 @dp.message_handler(commands=['updating_deleted'])
 async def command_updating_deleted(message: Message):
     await message_send(message.from_user.id, 'Start')
@@ -574,38 +475,43 @@ async def message_handler(message):
                 text, inline_kb, status = await homework_process(project_id, id_user, 'confirm', homework_id, text)
                 await message_answer(message, text, inline_kb)
 
-            elif answer_text == 'homework_feedback':
-                # await message_delete(message)
-
-                await base.insert_homework_response(project_id, homework_id, homework_id_user, id_user, text)
-
-                text, user_info, inline_kb, status = \
-                    await admin_homework_process(project_id, id_user, 'feedback', homework_id_user, 0, homework_id)
-
-                text = user_info + shielding(text)
-                message_id = await base.get_menu_message_id(id_user)
-                if message_id > 0:
-                    try:
-                        await bot.edit_message_text(
-                            chat_id=id_user,
-                            message_id=message_id,
-                            text=text,
-                            reply_markup=inline_kb,
-                            parse_mode='MarkdownV2')
-                    except Exception as e:
-                        pass
-
-                # homework_text = shielding('На ваше домашнее задание получен отклик куратора.')
-                # homework_inline_kb = InlineKeyboardMarkup(row_width=1)
-                # homework_inline_kb.add(InlineKeyboardButton(
-                #     text='Посмотреть',
-                #     callback_data=f'homework {project_id} feedback {homework_id}'))
-                # await message_send(homework_id_user, homework_text, homework_inline_kb)
+            # elif answer_text == 'homework_feedback':
+            #     # await message_delete(message)
+            #
+            #     await base.insert_homework_response(project_id, homework_id, homework_id_user, id_user, text)
+            #
+            #     text, user_info, inline_kb, status = \
+            #         await admin_homework_process(project_id, id_user, 'feedback', homework_id_user, 0, homework_id)
+            #
+            #     text = user_info + shielding(text)
+            #     message_id = await base.get_menu_message_id(id_user)
+            #     if message_id > 0:
+            #         try:
+            #             await bot.edit_message_text(
+            #                 chat_id=id_user,
+            #                 message_id=message_id,
+            #                 text=text,
+            #                 reply_markup=inline_kb,
+            #                 parse_mode='MarkdownV2')
+            #         except Exception as e:
+            #             pass
+            #
+            #     # homework_text = shielding('На ваше домашнее задание получен отклик куратора.')
+            #     # homework_inline_kb = InlineKeyboardMarkup(row_width=1)
+            #     # homework_inline_kb.add(InlineKeyboardButton(
+            #     #     text='Посмотреть',
+            #     #     callback_data=f'homework {project_id} feedback {homework_id}'))
+            #     # await message_send(homework_id_user, homework_text, homework_inline_kb)
 
             elif answer_text == 'homework_response':
-                await base.insert_homework_response(project_id, homework_id, id_user, id_user, text)
+                await base.insert_homework_response(project_id, homework_id, homework_id_user, id_user, text)
 
-                text, inline_kb, status = await homework_process(project_id, id_user, 'text99', homework_id, text)
+                if homework_id_user == id_user:
+                    text, inline_kb, status = await homework_process(project_id, id_user, 'text99', homework_id, text)
+                else:
+                    id_chat = await base.get_user_id_chat(homework_id_user)
+                    text, inline_kb, status = \
+                        await admin_homework_process(project_id, id_user, 'text', id_chat, homework_id, homework_id_user)
                 await last_menu_message_delete(id_user)
                 await message_answer(message, text, inline_kb)
 

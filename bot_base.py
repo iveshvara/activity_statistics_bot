@@ -254,7 +254,7 @@ class Database:
 
     async def get_menu_message_id(self, id_user):
         try:
-            self.cursor.execute("SELECT coalesce(menu_message_id, 0) FROM users WHERE id_user = %s", (id_user,))
+            self.cursor.execute("SELECT COALESCE(menu_message_id, 0) FROM users WHERE id_user = %s", (id_user,))
             result = self.cursor.fetchone()
             if result is None:
                 return 0
@@ -376,8 +376,9 @@ class Database:
                 --(SELECT id_user FROM homework_check WHERE admin_id = {id_user} AND NOT response IS NULL), 
                 
                 --homework_response
-                coalesce((SELECT project_id FROM homeworks_status WHERE id_user = {id_user} AND selected), 0), 
-                (SELECT homework_id FROM homeworks_status WHERE id_user = {id_user} AND selected)""")
+                coalesce((SELECT project_id FROM homeworks_status WHERE {id_user} = ANY(selected_id)), 0),
+                coalesce((SELECT homework_id FROM homeworks_status WHERE {id_user} = ANY(selected_id)), 0),
+                coalesce((SELECT id_user FROM homeworks_status WHERE {id_user} = ANY(selected_id)), 0)""")
             result = self.cursor.fetchone()
 
             if result[0]:
@@ -386,18 +387,21 @@ class Database:
                 answer_text = 'homeworks_task'
                 project_id = result[1]
             elif result[2] > 0:
-            #     answer_text = 'homework_feedback'
-            #     project_id = result[2]
-            #     homework_id = result[3]
-            #     homework_id_user = result[4]
-            # elif result[5] > 0:
                 answer_text = 'homework_response'
-                # project_id = result[5]
-                # homework_id = result[6]
                 project_id = result[2]
                 homework_id = result[3]
+                homework_id_user = result[4]
 
             return answer_text, project_id, homework_id, homework_id_user
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
+
+    async def save_last_notify_date_reminder(self, id_chat):
+        try:
+            today = get_today()
+            with self.connect:
+                self.cursor.execute('UPDATE settings SET last_notify_date = %s WHERE id_chat = %s', (today, id_chat))
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
@@ -413,9 +417,9 @@ class Database:
             self.cursor.execute(
                 """SELECT 
                     users.first_name, 
-                    coalesce(users.last_name, ''), 
-                    coalesce(users.username, ''), 
-                    coalesce(users.fio, ''), 
+                    COALESCE(users.last_name, ''), 
+                    COALESCE(users.username, ''), 
+                    COALESCE(users.fio, ''), 
                     settings.title 
                 FROM users 
                 INNER JOIN chats 
@@ -446,9 +450,9 @@ class Database:
             self.cursor.execute(
                 """SELECT 
                     first_name, 
-                    coalesce(last_name, ''), 
-                    coalesce(username, ''), 
-                    coalesce(fio, '') 
+                    COALESCE(last_name, ''), 
+                    COALESCE(username, ''), 
+                    COALESCE(fio, '') 
                 FROM users 
                 WHERE id_user = %s""", (id_user, ))
             result = self.cursor.fetchone()
@@ -466,6 +470,16 @@ class Database:
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
+    async def get_user_id_chat(self, id_user):
+        try:
+            self.cursor.execute("SELECT id_chat FROM chats WHERE NOT deleted AND id_user = %s", (id_user, ))
+            result = self.cursor.fetchone()
+
+            return result[0]
+
+        except Exception as e:
+            await send_error(self.cursor.query, str(e), traceback.format_exc())
+
     async def get_chats_for_reminder(self):
         try:
             today = get_today()
@@ -473,15 +487,6 @@ class Database:
                 "SELECT id_chat FROM settings WHERE report_enabled AND enable_group AND %s > last_notify_date",
                 (today,))
             return self.cursor.fetchall()
-
-        except Exception as e:
-            await send_error(self.cursor.query, str(e), traceback.format_exc())
-
-    async def save_last_notify_date_reminder(self, id_chat):
-        try:
-            today = get_today()
-            with self.connect:
-                self.cursor.execute('UPDATE settings SET last_notify_date = %s WHERE id_chat = %s', (today, id_chat))
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
@@ -590,7 +595,7 @@ class Database:
                 settings.period_of_activity, 
                 settings.sort_by, 
                 settings.check_channel_subscription, 
-                coalesce(projects.channel_id, 0),
+                COALESCE(projects.channel_id, 0),
                 settings.do_not_output_name_from_registration,
                 settings.project_id,
                 COUNT(DISTINCT homeworks_task.date) AS homeworks_task
@@ -606,7 +611,7 @@ class Database:
                 settings.period_of_activity, 
                 settings.sort_by,  
                 settings.check_channel_subscription, 
-                coalesce(projects.channel_id, 0),
+                COALESCE(projects.channel_id, 0),
                 settings.do_not_output_name_from_registration,
                 settings.project_id""", (id_chat,))
         meaning = cursor.fetchone()
@@ -1015,9 +1020,8 @@ class Database:
                         project_id,
                         homework_id,
                         id_user,
-                        accepted,
-                        selected)
-                    VALUES (%s, %s, %s, %s, False)
+                        accepted)
+                    VALUES (%s, %s, %s, %s)
                     ON CONFLICT (project_id, homework_id, id_user) DO UPDATE SET
                         accepted = %s""",
                     (project_id, homework_id, id_user, status, status))
@@ -1050,28 +1054,23 @@ class Database:
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
 
-    async def update_selected_homeworks(self, id_user, homework_id=None, project_id=None, selected=False):
+    async def update_selected_homeworks(self, id_user, homework_id=None, project_id=None, selected_id=None):
         try:
-            if homework_id is None:
-                homework_id = 0
-
             with self.connect:
                 if project_id is None:
-                    self.cursor.execute(
-                        'UPDATE homeworks_status SET selected = homework_id = %s WHERE id_user = %s',
-                        (homework_id, id_user))
-                else:
+                    self.cursor.execute('UPDATE homeworks_status SET selected_id = NULL WHERE %s = ANY(selected_id)', (id_user,))
+                elif selected_id is not None:
                     self.cursor.execute(
                         """INSERT INTO homeworks_status(
                             project_id,
                             homework_id,
                             id_user,
                             accepted,
-                            selected)
+                            selected_id)
                         VALUES (%s, %s, %s, False, %s)
                         ON CONFLICT (project_id, homework_id, id_user) DO UPDATE SET
-                            selected = homeworks_status.homework_id = %s""",
-                        (project_id, homework_id, id_user, selected, homework_id))
+                            selected_id = %s""",
+                        (project_id, homework_id, id_user, [selected_id], [selected_id]))
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
