@@ -119,7 +119,7 @@ def get_name_tg(id_user, first_name, last_name, username, fio=None):
     if not username == '':
         user += f' \(@{shielding(username)}\)'
 
-    user = user.replace(' ', '\xa0')
+    # user = user.replace(' ', '\xa0')
 
     return user
 

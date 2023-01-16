@@ -5,8 +5,8 @@ import traceback
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton as AddInlBtn
 
 from _settings import SUPER_ADMIN_ID
-from bot_base import bot, cursor, connect, base, send_error
-from service import shielding, get_name_tg, get_today, message_requirements, convert_bool, convert_bool_binary
+from bot_base import cursor, connect, base, send_error
+from service import shielding, message_requirements, convert_bool, convert_bool_binary
 from utility_functions import message_delete_by_id, callback_edit_text, message_send, message_progress_bar, \
     get_text_homework
 
@@ -15,206 +15,11 @@ async def run_reminder():
     result = await base.get_chats_for_reminder()
     for i in result:
         id_chat = i[0]
-        text = await get_stat(id_chat)
+        text = await base.get_stat(id_chat)
 
         if not text == '':
             await message_send(id_chat, text, disable_notification=True)
             await base.save_last_notify_date_reminder(id_chat)
-
-
-async def get_stat(id_chat, id_user=None):
-    cursor.execute(
-        '''SELECT 
-            settings.statistics_for_everyone, 
-            settings.include_admins_in_statistics, 
-            settings.period_of_activity, 
-            settings.sort_by, 
-            -- settings.do_not_output_the_number_of_messages, 
-            -- settings.do_not_output_the_number_of_characters, 
-            settings.check_channel_subscription, 
-            coalesce(projects.channel_id, 0),
-            settings.do_not_output_name_from_registration,
-            settings.project_id,
-            COUNT(DISTINCT homeworks_task.homework_id) AS homeworks_task
-        FROM settings 
-        LEFT OUTER JOIN projects 
-                ON settings.project_id = projects.project_id
-        LEFT OUTER JOIN homeworks_task 
-                ON settings.project_id = homeworks_task.project_id
-        WHERE id_chat = %s
-        GROUP BY
-            settings.statistics_for_everyone, 
-            settings.include_admins_in_statistics, 
-            settings.period_of_activity, 
-            settings.sort_by,  
-            settings.check_channel_subscription, 
-            coalesce(projects.channel_id, 0),
-            settings.do_not_output_name_from_registration,
-            settings.project_id''', (id_chat,))
-    meaning = cursor.fetchone()
-    if meaning is None:
-        await send_error(f'Не найден {id_chat}. Как такое может быть?', '', str(traceback.format_exc()))
-
-    statistics_for_everyone = meaning[0]
-    include_admins_in_statistics = meaning[1]
-    period_of_activity = meaning[2]
-    sort_by = meaning[3]
-    check_channel_subscription = meaning[4]
-    channel_id = meaning[5]
-    do_not_output_name_from_registration = meaning[6]
-    project_id = meaning[7]
-    homeworks_all = meaning[8]
-
-    if await base.its_admin(id_user) or id_user is None or statistics_for_everyone:
-        if sort_by == 'homeworks':
-            sort = 'homeworks DESC'
-        else:
-            sort = f'inactive_days ASC, {sort_by} DESC'
-        today = get_today()
-        count_messages = 0
-        cursor.execute(
-            f'''SELECT 
-                users.id_user, 
-                users.first_name, 
-                COALESCE(users.last_name, ''), 
-                COALESCE(users.username, ''), 
-                COALESCE(users.fio, ''),
-                SUM(COALESCE(messages.characters, 0)) AS characters, 
-                COUNT(messages.characters) AS messages, 
-                chats.deleted, 
-                chats.date_of_the_last_message, 
-                CASE 
-                    WHEN NOT chats.deleted 
-                        AND {period_of_activity} > DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
-                        THEN 0 
-                    ELSE DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
-                END AS inactive_days,
-                NOT role = 'user' AS admin, 
-                COUNT(homeworks_status.accepted) AS homeworks
-            FROM chats 
-            LEFT JOIN messages 
-                ON chats.id_chat = messages.id_chat 
-                    AND chats.id_user = messages.id_user 
-                    AND {period_of_activity} > DATE_PART('day', '{today}' - messages.date)
-            LEFT JOIN homeworks_status
-                ON chats.id_user = homeworks_status.id_user
-                    AND homeworks_status.project_id = {project_id}
-            INNER JOIN users 
-                ON chats.id_user = users.id_user  
-            WHERE 
-                chats.id_chat = {id_chat} 
-                AND users.id_user IS NOT NULL
-            GROUP BY 
-                users.id_user, 
-                users.first_name, 
-                COALESCE(users.last_name, ''), 
-                COALESCE(users.username, ''), 
-                COALESCE(users.fio, ''),
-                chats.deleted, 
-                chats.date_of_the_last_message, 
-                inactive_days,
-                NOT role = 'user'
-            ORDER BY 
-                deleted ASC,  
-                {sort},
-                users.first_name''')
-        meaning = cursor.fetchall()
-
-        its_homeworks = sort_by == 'homeworks'
-        if its_homeworks:
-            text = f'*Выполнили все дз:*'
-        else:
-            text = f'*Активные участники: `Символов/Сообщений/ДЗ из {homeworks_all}`*'
-        active_members_inscription_is_shown = False
-        deleted_members_inscription_is_shown = False
-
-        for i in meaning:
-            i_id_user = i[0]
-            i_first_name = i[1]
-            i_last_name = i[2]
-            i_username = i[3]
-            if do_not_output_name_from_registration:
-                i_fio = ''
-            else:
-                i_fio = i[4]
-            # i_characters = reduce_large_numbers(i[5])
-            i_characters = i[5]
-            i_messages = i[6]
-            i_deleted = i[7]
-            i_date_of_the_last_message = i[8]
-            i_inactive_days = int(i[9])
-            i_admin = i[10]
-            i_homeworks = i[11]
-
-            if not include_admins_in_statistics:
-                if i_admin:
-                    continue
-
-            if its_homeworks:
-                if i_homeworks < homeworks_all and not i_deleted and not active_members_inscription_is_shown:
-                    active_members_inscription_is_shown = True
-                    text += f'\n\n*Выполнили не все дз:*'
-
-                if i_homeworks == 0 and not deleted_members_inscription_is_shown:
-                    deleted_members_inscription_is_shown = True
-                    text += f'\n\n*Не выполнили ни одно дз:*'
-                    count_messages = 0
-
-                if i_deleted:
-                    continue
-
-            else:
-                if i_inactive_days > 0 and not i_deleted and not active_members_inscription_is_shown:
-                    active_members_inscription_is_shown = True
-                    text += f'\n\n*Неактивные участники:* `неактивен дней/ДЗ из {homeworks_all}`'
-
-                if i_deleted and not deleted_members_inscription_is_shown:
-                    deleted_members_inscription_is_shown = True
-                    text += f'\n\n*Вышедшие участники:*'
-                    count_messages = 0
-
-            count_messages += 1
-
-            channel_subscription = ''
-            if check_channel_subscription and not channel_id == 0 and not i_deleted:
-                member_status = False
-
-                try:
-                    member = await bot.get_chat_member(channel_id, i_id_user)
-                    member_status = not member.status == 'left'
-                except Exception as e:
-                    pass
-
-                if member_status:
-                    channel_subscription = ''
-                else:
-                    channel_subscription = '⚠️ '
-
-            specifics = ''
-            if i_deleted:
-                data_str = shielding(i_date_of_the_last_message.strftime("%d.%m.%Y"))
-                specifics = f' \(вне чата с {data_str}, дней назад: {i_inactive_days}\)'
-            else:
-                if not its_homeworks:
-                    if not sort_by == 'homeworks' and i_inactive_days > 0:
-                        specifics = f'{i_inactive_days}/'
-                    else:
-                        specifics = str(i_characters) + '/' + str(i_messages) + '/'
-
-                specifics += str(i_homeworks)
-                specifics = ': `' + specifics + '`'
-
-            user = get_name_tg(i_id_user, i_first_name, i_last_name, i_username, i_fio)
-            count_messages_text = str(count_messages)
-            text += f'\n{count_messages_text}\. {channel_subscription}{user}{specifics}'
-
-        if text == '*Активные участники:*\n':
-            text = 'Нет статистики для отображения\.'
-
-    else:
-        text = 'Статистику могут показать только администраторы группы\.'
-
-    return text
 
 
 async def get_start_menu(id_user):
@@ -305,7 +110,7 @@ async def keyboard_homework_all(project_id, id_user, status='text', its_admin=Fa
 
     result = await base.get_all_homework(project_id, id_user, its_admin, id_chat)
     for i in result:
-        homework_id = str(i[0])
+        i_homework_id = str(i[0])
         date = i[1].strftime("%d.%m.%Y")
         homework_status = ''
         homework_counter = ''
@@ -316,14 +121,14 @@ async def keyboard_homework_all(project_id, id_user, status='text', its_admin=Fa
             if i[2]:
                 homework_status = '✅'
 
-        text = f'{homework_status} №{homework_id} от {date}{homework_counter}'
-        callback_data = f'{part_admin}homework {project_id} {status}{part_id_chat} {homework_id}'
+        text = f'{homework_status} №{i_homework_id} от {date}{homework_counter}'
+        callback_data = f'{part_admin}homework {project_id} {status}{part_id_chat} {i_homework_id}'
         inline_kb.add(AddInlBtn(text=text, callback_data=callback_data))
 
     if its_admin:
         inline_kb.add(AddInlBtn(text='Назад', callback_data=f'{part_admin}homework {project_id} choice_group_back'))
     else:
-        inline_kb.add(AddInlBtn(text='Назад', callback_data=f'{part_admin}homework {project_id} back {homework_id}'))
+        inline_kb.add(AddInlBtn(text='Назад', callback_data=f'{part_admin}homework {project_id} back'))
 
     return inline_kb
 
@@ -1055,7 +860,7 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
     if super_admin:
         inline_kb.add(AddInlBtn(text='Назад', callback_data='super_admin '))
 
-    text = await get_stat(id_chat, id_user)
+    text = await base.get_stat(id_chat, id_user)
     group_name = shielding(title)
 
     return '*Группа "' + group_name + '"\.*\n\n' + text, inline_kb

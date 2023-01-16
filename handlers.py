@@ -1,6 +1,4 @@
 
-import datetime
-
 import requests
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, \
     KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatJoinRequest
@@ -8,12 +6,12 @@ from geopy.geocoders import Yandex
 
 from _settings import THIS_IS_BOT_NAME, YANDEX_API_KEY, GEONAMES_USERNAME, SUPER_ADMIN_ID
 from bot_base import bot, dp, base, cursor, connect
-from main_functions import get_stat, get_start_menu, registration_process, registration_command, \
+from main_functions import get_start_menu, registration_process, registration_command, \
     admin_homework_process, homework_process, process_parameter_continuation, \
     setting_up_a_chat
 from service import add_buttons_time_selection, its_admin, shielding
 from utility_functions import callback_edit_text, message_answer, message_delete, last_menu_message_delete, \
-    message_send, callback_answer, message_edit_text, message_progress_bar
+    message_send, callback_answer
 
 
 @dp.message_handler(commands=['start', 'menu'])
@@ -202,7 +200,7 @@ async def command_get_stat(message: Message):
         id_chat = message.chat.id
         id_user = message.from_user.id
 
-        text = await get_stat(id_chat, id_user)
+        text = await base.get_stat(id_chat, id_user)
 
         if not text == '':
             await message_answer(message, text)

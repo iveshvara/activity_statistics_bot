@@ -614,7 +614,7 @@ class Database:
                 COALESCE(projects.channel_id, 0),
                 settings.do_not_output_name_from_registration,
                 settings.project_id""", (id_chat,))
-        meaning = cursor.fetchone()
+        meaning = self.cursor.fetchone()
         if meaning is None:
             await send_error(f'Не найден {id_chat}. Как такое может быть?', '', str(traceback.format_exc()))
 
@@ -635,7 +635,7 @@ class Database:
                 sort = f'inactive_days ASC, {sort_by} DESC'
             today = get_today()
             count_messages = 0
-            cursor.execute(
+            self.cursor.execute(
                 f"""SELECT 
                     users.id_user, 
                     users.first_name, 
@@ -653,7 +653,7 @@ class Database:
                         ELSE DATE_PART('day', '{today}' - chats.date_of_the_last_message) 
                     END AS inactive_days,
                     NOT role = 'user' AS admin, 
-                    COUNT(homeworks_status.accepted) AS homeworks
+                    COUNT(DISTINCT homeworks_status.homework_id) AS homeworks
                 FROM chats 
                 LEFT JOIN messages 
                     ON chats.id_chat = messages.id_chat 
@@ -681,7 +681,7 @@ class Database:
                     deleted ASC,  
                     {sort},
                     users.first_name""")
-            meaning = cursor.fetchall()
+            meaning = self.cursor.fetchall()
 
             its_homeworks = sort_by == 'homeworks'
             if its_homeworks:
@@ -976,15 +976,12 @@ class Database:
                 i_text = shielding(i_text)
 
                 user_info = await base.get_user_info(i_id_user)
+                user_info = user_info.replace(' ', '\xa0')
+
                 heading = f'\n\n\n__*{user_info} от {i_date}:*__'
                 heading = heading.replace(' ', '\xa0')
-                text = heading + '\n' + i_text
-                # if last_user_info == user_info:
-                #     text = f'\n{i_text}'
-                # else:
-                #     last_user_info = user_info
-                #     text = f'\n\n\n__*{user_info} от {i_date}:*__\n{i_text}'
 
+                text = heading + '\n' + i_text
                 array_text = add_text_to_array(array_text, text)
 
             # array_text_len = len(array_text)
