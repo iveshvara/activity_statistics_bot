@@ -550,10 +550,10 @@ class Database:
         try:
             self.cursor.execute("SELECT NOT registration_field = 'done' FROM users WHERE id_user = %s", (id_user,))
             result = self.cursor.fetchone()
-            if result is None or result[0]:
+            if result is None:
                 return False
             else:
-                return True
+                return result[0]
 
         except Exception as e:
             await send_error(self.cursor.query, str(e), traceback.format_exc())
