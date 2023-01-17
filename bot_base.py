@@ -1054,9 +1054,10 @@ class Database:
     async def update_selected_homeworks(self, id_user, homework_id=None, project_id=None, selected_id=None):
         try:
             with self.connect:
-                if project_id is None:
-                    self.cursor.execute('UPDATE homeworks_status SET selected_id = NULL WHERE %s = ANY(selected_id)', (id_user,))
-                elif selected_id is not None:
+                # if project_id is None:
+                self.cursor.execute('UPDATE homeworks_status SET selected_id = NULL WHERE %s = ANY(selected_id)', (id_user,))
+
+                if selected_id is not None:
                     self.cursor.execute(
                         """INSERT INTO homeworks_status(
                             project_id,
