@@ -548,7 +548,7 @@ class Database:
 
     async def registration_done(self, id_user):
         try:
-            self.cursor.execute("SELECT NOT registration_field = 'done' FROM users WHERE id_user = %s", (id_user,))
+            self.cursor.execute("SELECT registration_field = 'done' FROM users WHERE id_user = %s", (id_user,))
             result = self.cursor.fetchone()
             if result is None:
                 return False

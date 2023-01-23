@@ -53,46 +53,45 @@ async def get_start_menu(id_user):
     text = 'Меню:'
     inline_kb = InlineKeyboardMarkup(row_width=1)
 
+    registration_done = await base.registration_done(id_user)
+
     if len(user_groups) == 0:
         if len(meaning) == 0 or not channel_enabled:
             text = 'Это бот для участников проектов https://ipdt.kz/proekty/. Присоединяйтесь!'
             text = shielding(text)
-            inline_kb = InlineKeyboardMarkup(row_width=1)
             inline_kb.add(AddInlBtn(text='Перейти на сайт.', url='https://ipdt.kz/proekty/'))
 
-        elif not await base.registration_done(id_user):
+        elif not registration_done:
             text = 'Добрый день, дорогой друг! \n\n' \
                    'Команда Института рада приветствовать Вас! \n\n' \
                    'Для того, чтобы получить доступ к материалам, необходимо пройти небольшую регистрацию!'
             text = shielding(text)
-            inline_kb = InlineKeyboardMarkup(row_width=1)
             inline_kb.add(AddInlBtn(text='Регистрация', callback_data='reg'))
 
     else:
-        text = 'Выберете группу для настройки:'
         for i in user_groups:
             inline_kb.add(AddInlBtn(text=i[1], callback_data=f'id_chat {i[0]}'))
 
-    project_id, project_name = await base.get_project_by_user(id_user)
-    text = 'Домашние работы'
-    if await base.its_admin(id_user):
-        callback_data = f'admin_homework {project_id} choice_group'
-    else:
-        callback_data = f'homework {project_id} choice'
-    inline_kb.add(AddInlBtn(text=text, callback_data=callback_data))
+    if registration_done:
+        project_id, project_name = await base.get_project_by_user(id_user)
+        if await base.its_admin(id_user):
+            callback_data = f'admin_homework {project_id} choice_group'
+        else:
+            callback_data = f'homework {project_id} choice'
+        inline_kb.add(AddInlBtn(text='Домашние работы', callback_data=callback_data))
 
-    if await base.registration_done(id_user):
-        result = await base.application_for_membership(id_user)
-        if result is not None:
-            url = result[2]
-            if url is not None and len(url) > 0:
-                inline_kb.add(AddInlBtn('Канал с лекциями', url=url))
+        if await base.registration_done(id_user):
+            result = await base.application_for_membership(id_user)
+            if result is not None:
+                url = result[2]
+                if url is not None and len(url) > 0:
+                    inline_kb.add(AddInlBtn('Канал с лекциями', url=url))
 
-    if await base.its_admin_project(id_user, project_id):
-        inline_kb.add(AddInlBtn(text='Рассылка по "' + project_name + '"', callback_data=f'homework {project_id}'))
+        if await base.its_admin_project(id_user, project_id):
+            inline_kb.add(AddInlBtn(text='Рассылка по "' + project_name + '"', callback_data=f'homework {project_id}'))
 
-    if id_user == SUPER_ADMIN_ID:
-        inline_kb.add(AddInlBtn(text='God mode', callback_data='super_admin '))
+        if id_user == SUPER_ADMIN_ID:
+            inline_kb.add(AddInlBtn(text='God mode', callback_data='super_admin '))
 
     return text, inline_kb
 
@@ -829,13 +828,14 @@ async def setting_up_a_chat(id_chat, id_user, back_button=True, super_admin=Fals
         text='Статистика за период (дней): ' + str(period_of_activity),
         callback_data=f'settings {id_chat} period_of_activity {period_of_activity}'))
 
-    inline_kb.add(AddInlBtn(
-        text='Автоматический отчет в чат: ' + convert_bool(report_enabled),
-        callback_data=f'settings {id_chat} report_enabled {convert_bool_binary(report_enabled)}'))
+    if super_admin:
+        inline_kb.add(AddInlBtn(
+            text='Автоматический отчет в чат: ' + convert_bool(report_enabled),
+            callback_data=f'settings {id_chat} report_enabled {convert_bool_binary(report_enabled)}'))
 
-    inline_kb.add(AddInlBtn(
-        text='Проект: ' + projects_name,
-        callback_data=f'settings {id_chat} project_name'))
+        inline_kb.add(AddInlBtn(
+            text='Проект: ' + projects_name,
+            callback_data=f'settings {id_chat} project_name'))
 
     if do_not_output_name_from_registration:
         text='Имя и фамилия пользователя'
