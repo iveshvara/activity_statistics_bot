@@ -550,7 +550,7 @@ class Database:
         try:
             self.cursor.execute("SELECT registration_field = 'done' FROM users WHERE id_user = %s", (id_user,))
             result = self.cursor.fetchone()
-            if result is None:
+            if result is None or result[0] is None:
                 return False
             else:
                 return result[0]
