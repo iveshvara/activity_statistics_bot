@@ -93,6 +93,9 @@ async def get_start_menu(id_user):
         if id_user == SUPER_ADMIN_ID:
             inline_kb.add(AddInlBtn(text='God mode', callback_data='super_admin '))
 
+    else:
+        inline_kb.add(AddInlBtn(text='Регистрация', callback_data='reg'))
+
     return text, inline_kb
 
 
